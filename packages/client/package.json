@@ -1,0 +1,13 @@
+{
+  "name": "@duet/client",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'client dev placeholder'",
+    "build": "echo 'client build placeholder'"
+  },
+  "dependencies": {
+    "@duet/shared": "workspace:*"
+  }
+}

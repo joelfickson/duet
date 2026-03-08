@@ -1,0 +1,16 @@
+{
+  "name": "duet",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Collaborative AI sessions where multiple people share a live context",
+  "author": "Joel Fickson",
+  "license": "MIT",
+  "scripts": {
+    "dev": "pnpm --filter @duet/server dev & pnpm --filter @duet/client dev",
+    "build": "pnpm -r build",
+    "lint": "biome lint .",
+    "format": "biome format .",
+    "check": "biome check .",
+    "typecheck": "tsc -b packages/shared packages/server packages/client"
+  }
+}
