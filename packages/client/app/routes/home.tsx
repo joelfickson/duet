@@ -1,11 +1,11 @@
+import { ArrowRight, Github, Plus, Sparkles, Users, Zap } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Card, CardContent } from "~/components/ui/card";
-import { Separator } from "~/components/ui/separator";
 import { Badge } from "~/components/ui/badge";
-import { Users, Sparkles, Zap, ArrowRight, Plus, Github } from "lucide-react";
+import { Button } from "~/components/ui/button";
+import { Card, CardContent } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
+import { Separator } from "~/components/ui/separator";
 import type { Route } from "./+types/home";
 
 export function meta(_args: Route.MetaArgs) {
@@ -56,7 +56,7 @@ export default function Home() {
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     if (sessionCode.trim()) {
-      navigate(`/session/${sessionCode.trim()}`);
+      navigate(`/join/${sessionCode.trim()}`);
     }
   }
 
