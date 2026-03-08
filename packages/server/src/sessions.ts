@@ -1,14 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { Participant, Session } from "@duet/shared";
+import type { Participant, Session, SessionState } from "@duet/shared";
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
-interface SessionState {
-  session: Session;
+interface ServerSessionState extends SessionState {
   idleTimer: ReturnType<typeof setTimeout> | null;
 }
 
-const sessions = new Map<string, SessionState>();
+const sessions = new Map<string, ServerSessionState>();
 
 function resetIdleTimer(sessionId: string): void {
   const state = sessions.get(sessionId);
