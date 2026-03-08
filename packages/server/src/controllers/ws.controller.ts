@@ -10,6 +10,11 @@ import {
 } from "../services/connections";
 import { createMessage, validateMessageContent } from "../services/messages";
 import {
+  bufferMessage,
+  stashDisconnected,
+  tryReconnect,
+} from "../services/reconnection";
+import {
   getParticipants,
   joinSession,
   leaveSession,
@@ -60,6 +65,12 @@ export function handleLeave(conn: Connection, log: FastifyBaseLogger): void {
       isTyping: false,
     };
     broadcastToSession(sessionId, stopPayload, conn.id);
+  }
+
+  const participants = getParticipants(sessionId);
+  const participant = participants.find((p) => p.id === conn.participantId);
+  if (participant) {
+    stashDisconnected(sessionId, participant);
   }
 
   log.info(
@@ -119,6 +130,8 @@ export function handleMessage(
     "message broadcast",
   );
 
+  bufferMessage(sessionId, message);
+
   const broadcastPayload: WsPayload = {
     type: WsEvent.Message,
     message,
@@ -173,4 +186,52 @@ export function handleTyping(
     isTyping: data.isTyping,
   };
   broadcastToSession(sessionId, payload, conn.id);
+}
+
+export function handleReconnect(
+  conn: Connection,
+  data: WsPayload,
+  log: FastifyBaseLogger,
+): void {
+  if (data.type !== WsEvent.Reconnect) return;
+
+  const result = tryReconnect(data.sessionId, data.participantId);
+  if (!result) {
+    log.warn(
+      { sessionId: data.sessionId, participantId: data.participantId },
+      "reconnect failed: no stashed session or grace period expired",
+    );
+    sendError(
+      conn,
+      "RECONNECT_FAILED",
+      "No active reconnection window for this participant",
+    );
+    return;
+  }
+
+  const session = joinSession(data.sessionId, result.participant);
+  if (!session) {
+    sendError(conn, "SESSION_NOT_FOUND", `Session ${data.sessionId} not found`);
+    return;
+  }
+
+  mapConnectionToSession(conn.id, data.sessionId, result.participant.id);
+  log.info(
+    {
+      sessionId: data.sessionId,
+      participantId: result.participant.id,
+      missedMessages: result.missedMessages.length,
+    },
+    "participant reconnected",
+  );
+
+  for (const msg of result.missedMessages) {
+    const payload: WsPayload = {
+      type: WsEvent.Message,
+      message: msg,
+    };
+    conn.socket.send(JSON.stringify(payload));
+  }
+
+  broadcastPresence(data.sessionId);
 }

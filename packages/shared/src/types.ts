@@ -36,6 +36,7 @@ export enum WsEvent {
   AiChunk = "ai-chunk",
   Error = "error",
   Presence = "presence",
+  Reconnect = "reconnect",
 }
 
 export interface JoinPayload {
@@ -87,6 +88,12 @@ export interface MessageAckPayload {
   createdAt: string;
 }
 
+export interface ReconnectPayload {
+  type: WsEvent.Reconnect;
+  sessionId: string;
+  participantId: string;
+}
+
 export type WsPayload =
   | JoinPayload
   | LeavePayload
@@ -95,4 +102,5 @@ export type WsPayload =
   | AiChunkPayload
   | ErrorPayload
   | PresencePayload
-  | MessageAckPayload;
+  | MessageAckPayload
+  | ReconnectPayload;
