@@ -15,6 +15,7 @@ import {
   getHeartbeatConfig,
   setHeartbeatConfig,
 } from "./services/heartbeat";
+import { clearAllRateLimits } from "./services/rate-limit";
 import { clearAllDisconnected, setGracePeriod } from "./services/reconnection";
 import {
   createSession,
@@ -109,6 +110,7 @@ afterEach(async () => {
   clearAllTyping();
   clearAllHeartbeats();
   clearAllDisconnected();
+  clearAllRateLimits();
   await app.close();
 });
 
