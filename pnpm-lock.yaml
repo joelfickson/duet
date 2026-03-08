@@ -1,0 +1,23 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  packages/client:
+    dependencies:
+      '@duet/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/server:
+    dependencies:
+      '@duet/shared':
+        specifier: workspace:*
+        version: link:../shared
+
+  packages/shared: {}
