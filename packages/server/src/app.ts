@@ -1,6 +1,7 @@
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyServerOptions } from "fastify";
 import { healthRoute } from "./routes/health";
+import { sessionsRoute } from "./routes/sessions";
 import { wsRoute } from "./routes/ws";
 
 export async function buildApp(opts: FastifyServerOptions = {}) {
@@ -13,6 +14,7 @@ export async function buildApp(opts: FastifyServerOptions = {}) {
 
   await server.register(websocket);
   await server.register(healthRoute);
+  await server.register(sessionsRoute);
   await server.register(wsRoute);
 
   return server;

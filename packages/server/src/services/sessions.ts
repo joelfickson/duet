@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { Participant, Session, SessionState } from "@duet/shared";
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -8,6 +8,33 @@ interface ServerSessionState extends SessionState {
 }
 
 const sessions = new Map<string, ServerSessionState>();
+
+const ID_LENGTH = 10;
+const ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+const MAX_VALID = 256 - (256 % ALPHABET.length);
+
+export function generateSessionId(): string {
+  let id = "";
+  while (id.length < ID_LENGTH) {
+    const bytes = randomBytes(ID_LENGTH);
+    for (const byte of bytes) {
+      if (byte < MAX_VALID && id.length < ID_LENGTH) {
+        id += ALPHABET[byte % ALPHABET.length];
+      }
+    }
+  }
+  return id;
+}
+
+function generateUniqueSessionId(): string {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const id = generateSessionId();
+    if (!sessions.has(id)) return id;
+  }
+  throw new Error("Failed to generate unique session ID after 10 attempts");
+}
 
 function resetIdleTimer(sessionId: string): void {
   const state = sessions.get(sessionId);
@@ -36,7 +63,7 @@ function idleTimeoutMs(): number {
 
 export function createSession(title?: string): Session {
   const session: Session = {
-    id: randomUUID().slice(0, 10),
+    id: generateUniqueSessionId(),
     title: title ?? null,
     createdAt: new Date().toISOString(),
     participants: [],
