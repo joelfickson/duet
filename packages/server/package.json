@@ -10,11 +10,14 @@
   },
   "dependencies": {
     "@duet/shared": "workspace:*",
+    "@fastify/websocket": "^11.2.0",
     "fastify": "^5.8.2"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "ws": "^8.19.0"
   }
 }
