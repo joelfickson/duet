@@ -1,6 +1,6 @@
 import type { Route } from "./+types/home";
 
-export function meta({}: Route.MetaArgs) {
+export function meta(_args: Route.MetaArgs) {
   return [
     { title: "Duet" },
     { name: "description", content: "Collaborative AI sessions" },
