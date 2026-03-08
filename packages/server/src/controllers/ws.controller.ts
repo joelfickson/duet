@@ -14,6 +14,7 @@ import {
   joinSession,
   leaveSession,
 } from "../services/sessions";
+import { clearTyping, isTyping, setTyping } from "../services/typing";
 
 function sendError(conn: Connection, code: string, message: string): void {
   const payload: WsPayload = {
@@ -50,6 +51,17 @@ export function handleLeave(conn: Connection, log: FastifyBaseLogger): void {
   const sessionId = getSessionForConnection(conn.id);
   if (!sessionId || !conn.participantId) return;
 
+  if (isTyping(sessionId, conn.participantId)) {
+    clearTyping(sessionId, conn.participantId);
+    const stopPayload: WsPayload = {
+      type: WsEvent.Typing,
+      sessionId,
+      participantId: conn.participantId,
+      isTyping: false,
+    };
+    broadcastToSession(sessionId, stopPayload, conn.id);
+  }
+
   log.info(
     { sessionId, participantId: conn.participantId },
     "participant left",
@@ -84,6 +96,17 @@ export function handleMessage(
   const sender = participants.find((p) => p.id === conn.participantId);
   if (!sender) return;
 
+  if (isTyping(sessionId, conn.participantId)) {
+    clearTyping(sessionId, conn.participantId);
+    const stopPayload: WsPayload = {
+      type: WsEvent.Typing,
+      sessionId,
+      participantId: conn.participantId,
+      isTyping: false,
+    };
+    broadcastToSession(sessionId, stopPayload, conn.id);
+  }
+
   const message = createMessage(
     sessionId,
     sender.id,
@@ -109,4 +132,45 @@ export function handleMessage(
     createdAt: message.createdAt,
   };
   conn.socket.send(JSON.stringify(ackPayload));
+}
+
+export function handleTyping(
+  conn: Connection,
+  data: WsPayload,
+  log: FastifyBaseLogger,
+): void {
+  if (data.type !== WsEvent.Typing) return;
+
+  const sessionId = getSessionForConnection(conn.id);
+  if (!sessionId || !conn.participantId) return;
+
+  const participantId = conn.participantId;
+
+  if (data.isTyping) {
+    setTyping(sessionId, participantId, () => {
+      log.debug({ sessionId, participantId }, "typing timeout");
+      const stopPayload: WsPayload = {
+        type: WsEvent.Typing,
+        sessionId,
+        participantId,
+        isTyping: false,
+      };
+      broadcastToSession(sessionId, stopPayload);
+    });
+  } else {
+    clearTyping(sessionId, participantId);
+  }
+
+  log.debug(
+    { sessionId, participantId, isTyping: data.isTyping },
+    "typing event",
+  );
+
+  const payload: WsPayload = {
+    type: WsEvent.Typing,
+    sessionId,
+    participantId,
+    isTyping: data.isTyping,
+  };
+  broadcastToSession(sessionId, payload, conn.id);
 }

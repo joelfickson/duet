@@ -5,6 +5,7 @@ import {
   handleJoin,
   handleLeave,
   handleMessage,
+  handleTyping,
 } from "../controllers/ws.controller";
 import { addConnection, removeConnection } from "../services/connections";
 
@@ -33,6 +34,9 @@ export async function wsRoute(server: FastifyInstance): Promise<void> {
           break;
         case WsEvent.Message:
           handleMessage(conn, data, log);
+          break;
+        case WsEvent.Typing:
+          handleTyping(conn, data, log);
           break;
       }
     });
