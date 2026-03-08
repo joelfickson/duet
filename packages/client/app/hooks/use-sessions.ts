@@ -14,16 +14,21 @@ export function useSessionExists(sessionId: string) {
   });
 }
 
+interface CreateSessionParams {
+  title?: string;
+  displayName: string;
+}
+
 export function useCreateSession() {
   const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: async (title?: string) => {
+    mutationFn: async ({ title }: CreateSessionParams) => {
       const { data } = await apiClient.post("/api/sessions", { title });
       return sessionSchema.parse(data);
     },
-    onSuccess: (session) => {
-      navigate(`/session/${session.id}`);
+    onSuccess: (session, { displayName }) => {
+      navigate(`/session/${session.id}`, { state: { displayName } });
     },
   });
 }
