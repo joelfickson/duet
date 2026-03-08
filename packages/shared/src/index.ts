@@ -1,1 +1,15 @@
-export {};
+export {
+  WsEvent,
+  type Participant,
+  type Session,
+  type Message,
+  type MessageRole,
+  type JoinPayload,
+  type LeavePayload,
+  type MessagePayload,
+  type TypingPayload,
+  type AiChunkPayload,
+  type ErrorPayload,
+  type PresencePayload,
+  type WsPayload,
+} from "./types.js";
