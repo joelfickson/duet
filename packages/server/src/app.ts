@@ -1,4 +1,5 @@
-import type { WsPayload } from "@duet/shared";
+import { randomUUID } from "node:crypto";
+import type { Message, WsPayload } from "@duet/shared";
 import { WsEvent } from "@duet/shared";
 import websocket from "@fastify/websocket";
 import Fastify from "fastify";
@@ -75,6 +76,59 @@ export async function buildApp() {
     broadcastPresence(sessionId);
   }
 
+  function handleMessage(
+    conn: ReturnType<typeof addConnection>,
+    data: WsPayload,
+  ): void {
+    if (data.type !== WsEvent.Message) return;
+
+    const sessionId = getSessionForConnection(conn.id);
+    if (!sessionId || !conn.participantId) return;
+
+    const incoming = data.message;
+    if (
+      !incoming?.content ||
+      typeof incoming.content !== "string" ||
+      incoming.content.trim() === ""
+    ) {
+      const errorPayload: WsPayload = {
+        type: WsEvent.Error,
+        code: "INVALID_MESSAGE",
+        message: "Message content must be a non-empty string",
+      };
+      conn.socket.send(JSON.stringify(errorPayload));
+      return;
+    }
+
+    const participants = getParticipants(sessionId);
+    const sender = participants.find((p) => p.id === conn.participantId);
+    if (!sender) return;
+
+    const message: Message = {
+      id: randomUUID(),
+      sessionId,
+      senderId: sender.id,
+      senderName: sender.name,
+      content: incoming.content.trim(),
+      role: "user",
+      createdAt: new Date().toISOString(),
+    };
+
+    const broadcastPayload: WsPayload = {
+      type: WsEvent.Message,
+      message,
+    };
+    broadcastToSession(sessionId, broadcastPayload, conn.id);
+
+    const ackPayload: WsPayload = {
+      type: WsEvent.MessageAck,
+      messageId: message.id,
+      sessionId,
+      createdAt: message.createdAt,
+    };
+    conn.socket.send(JSON.stringify(ackPayload));
+  }
+
   server.get("/ws", { websocket: true }, (socket, _req) => {
     const conn = addConnection(socket);
 
@@ -92,6 +146,9 @@ export async function buildApp() {
           break;
         case WsEvent.Leave:
           handleLeave(conn);
+          break;
+        case WsEvent.Message:
+          handleMessage(conn, data);
           break;
       }
     });
