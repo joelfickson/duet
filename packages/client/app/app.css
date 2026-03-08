@@ -1,0 +1,35 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap");
+@import "tailwindcss";
+
+* {
+    font-family: "Fraunces", ui-serif, Georgia, serif !important;
+}
+
+@theme {
+    --font-display: "Fraunces", ui-serif, Georgia, serif;
+    --font-sans: "DM Sans", system-ui, sans-serif;
+
+    /* Backgrounds */
+    --color-midnight: #1a1a2e;
+    --color-deep-navy: #1e1e2e;
+    --color-charcoal: #4a4a4a;
+
+    /* Brand Accents */
+    --color-steel: #457b9d;
+    --color-ocean: #2e74b5;
+    --color-deep-blue: #1f4d78;
+
+    /* Semantic */
+    --color-crimson: #e63946;
+    --color-sage: #a8d8a8;
+    --color-frost: #f1faee;
+
+    /* Text & Surface */
+    --color-cloud: #f5f5f7;
+    --color-silver: #e0e0e0;
+}
+
+html,
+body {
+    @apply bg-midnight text-cloud font-sans;
+}
