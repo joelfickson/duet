@@ -1,0 +1,198 @@
+import type { PresencePayload, WsPayload } from "@duet/shared";
+import { WsEvent } from "@duet/shared";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildApp } from "./app.js";
+import { clearAllConnections } from "./connections.js";
+import { createSession, destroySession, getAllSessions } from "./sessions.js";
+
+type App = Awaited<ReturnType<typeof buildApp>>;
+let app: App;
+
+function joinPayload(sessionId: string, id: string, name: string): string {
+  return JSON.stringify({
+    type: WsEvent.Join,
+    sessionId,
+    participant: { id, name, connectedAt: new Date().toISOString() },
+  });
+}
+
+function leavePayload(sessionId: string, participantId: string): string {
+  return JSON.stringify({
+    type: WsEvent.Leave,
+    sessionId,
+    participantId,
+  });
+}
+
+function waitForMessage(ws: {
+  once(event: string, cb: (data: unknown) => void): void;
+}): Promise<WsPayload> {
+  return new Promise((resolve) => {
+    ws.once("message", (data: unknown) => {
+      resolve(JSON.parse(String(data)));
+    });
+  });
+}
+
+beforeEach(async () => {
+  app = await buildApp();
+  await app.ready();
+});
+
+afterEach(async () => {
+  for (const s of getAllSessions()) {
+    destroySession(s.id);
+  }
+  clearAllConnections();
+  await app.close();
+});
+
+describe("e2e: participant tracking", () => {
+  it("joining a session broadcasts presence to the joiner", async () => {
+    const session = createSession("test");
+
+    const ws = await app.injectWS("/ws");
+
+    const msgPromise = waitForMessage(ws);
+    ws.send(joinPayload(session.id, "p1", "Alice"));
+
+    const msg = await msgPromise;
+    expect(msg.type).toBe(WsEvent.Presence);
+    const presence = msg as PresencePayload;
+    expect(presence.participants).toHaveLength(1);
+    expect(presence.participants[0].name).toBe("Alice");
+
+    ws.terminate();
+  });
+
+  it("second participant join broadcasts presence to first participant", async () => {
+    const session = createSession("test");
+
+    const ws1 = await app.injectWS("/ws");
+    const ws2 = await app.injectWS("/ws");
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const presencePromise = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+
+    const msg = await presencePromise;
+    expect(msg.type).toBe(WsEvent.Presence);
+    const presence = msg as PresencePayload;
+    expect(presence.participants).toHaveLength(2);
+    const names = presence.participants.map((p) => p.name);
+    expect(names).toContain("Alice");
+    expect(names).toContain("Bob");
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("disconnecting broadcasts updated presence to remaining members", async () => {
+    const session = createSession("test");
+
+    const ws1 = await app.injectWS("/ws");
+    const ws2 = await app.injectWS("/ws");
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const bobJoinPromise = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+    await bobJoinPromise;
+
+    const leavePromise = waitForMessage(ws1);
+    ws2.terminate();
+
+    const msg = await leavePromise;
+    expect(msg.type).toBe(WsEvent.Presence);
+    const presence = msg as PresencePayload;
+    expect(presence.participants).toHaveLength(1);
+    expect(presence.participants[0].name).toBe("Alice");
+
+    ws1.terminate();
+  });
+
+  it("explicit leave event removes participant and broadcasts", async () => {
+    const session = createSession("test");
+
+    const ws1 = await app.injectWS("/ws");
+    const ws2 = await app.injectWS("/ws");
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const bobJoinPromise = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+    await bobJoinPromise;
+
+    const leavePromise = waitForMessage(ws1);
+    ws2.send(leavePayload(session.id, "p2"));
+
+    const msg = await leavePromise;
+    expect(msg.type).toBe(WsEvent.Presence);
+    const presence = msg as PresencePayload;
+    expect(presence.participants).toHaveLength(1);
+    expect(presence.participants[0].name).toBe("Alice");
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("joining a nonexistent session returns an error", async () => {
+    const ws = await app.injectWS("/ws");
+
+    const msgPromise = waitForMessage(ws);
+    ws.send(joinPayload("nonexistent", "p1", "Alice"));
+
+    const msg = await msgPromise;
+    expect(msg.type).toBe(WsEvent.Error);
+    expect((msg as { code: string }).code).toBe("SESSION_NOT_FOUND");
+
+    ws.terminate();
+  });
+
+  it("supports many participants in the same session", async () => {
+    const session = createSession("test");
+    const sockets: Awaited<ReturnType<typeof app.injectWS>>[] = [];
+    const count = 10;
+
+    for (let i = 0; i < count; i++) {
+      const ws = await app.injectWS("/ws");
+      sockets.push(ws);
+    }
+
+    for (let i = 0; i < count; i++) {
+      const promises = sockets.slice(0, i).map((ws) => waitForMessage(ws));
+
+      sockets[i].send(joinPayload(session.id, `p${i}`, `User${i}`));
+      const selfPresence = await waitForMessage(sockets[i]);
+
+      expect(selfPresence.type).toBe(WsEvent.Presence);
+      expect((selfPresence as PresencePayload).participants).toHaveLength(
+        i + 1,
+      );
+
+      await Promise.all(promises);
+    }
+
+    for (const ws of sockets) {
+      ws.terminate();
+    }
+  });
+
+  it("invalid JSON is ignored without crashing", async () => {
+    const ws = await app.injectWS("/ws");
+    ws.send("not json at all");
+
+    const session = createSession("test");
+    const msgPromise = waitForMessage(ws);
+    ws.send(joinPayload(session.id, "p1", "Alice"));
+
+    const msg = await msgPromise;
+    expect(msg.type).toBe(WsEvent.Presence);
+
+    ws.terminate();
+  });
+});
