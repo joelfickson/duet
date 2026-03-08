@@ -11,6 +11,12 @@ import type { WebSocket } from "ws";
 import { buildApp } from "./app";
 import { clearAllConnections } from "./services/connections";
 import {
+  clearAllHeartbeats,
+  getHeartbeatConfig,
+  setHeartbeatConfig,
+} from "./services/heartbeat";
+import { clearAllDisconnected, setGracePeriod } from "./services/reconnection";
+import {
   createSession,
   destroySession,
   getAllSessions,
@@ -74,6 +80,14 @@ function typingPayload(
   });
 }
 
+function reconnectPayload(sessionId: string, participantId: string): string {
+  return JSON.stringify({
+    type: WsEvent.Reconnect,
+    sessionId,
+    participantId,
+  });
+}
+
 function waitForMessage(ws: TestSocket): Promise<WsPayload> {
   return new Promise((resolve) => {
     ws.once("message", (data: unknown) => {
@@ -93,6 +107,8 @@ afterEach(async () => {
   }
   clearAllConnections();
   clearAllTyping();
+  clearAllHeartbeats();
+  clearAllDisconnected();
   await app.close();
 });
 
@@ -635,5 +651,131 @@ describe("e2e: typing indicators", () => {
 
     ws1.terminate();
     ws2.terminate();
+  });
+});
+
+describe("e2e: heartbeat", () => {
+  it("heartbeat config is configurable", () => {
+    setHeartbeatConfig(100, 2);
+    const config = getHeartbeatConfig();
+    expect(config.intervalMs).toBe(100);
+    expect(config.maxMissed).toBe(2);
+  });
+});
+
+describe("e2e: reconnection", () => {
+  async function setupTwoJoined() {
+    const session = createSession("test");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const p1Presence = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+    await waitForMessage(ws2);
+    await p1Presence;
+
+    return { session, ws1, ws2 };
+  }
+
+  it("reconnect within grace period restores participant identity", async () => {
+    setGracePeriod(5000);
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    ws2.terminate();
+    await waitForMessage(ws1);
+
+    const ws3 = await injectWS();
+    const presencePromise = waitForMessage(ws1);
+    ws3.send(reconnectPayload(session.id, "p2"));
+
+    const presence = (await presencePromise) as PresencePayload;
+    expect(presence.type).toBe(WsEvent.Presence);
+    expect(presence.participants).toHaveLength(2);
+    expect(presence.participants.map((p) => p.id)).toContain("p2");
+
+    ws1.terminate();
+    ws3.terminate();
+  });
+
+  it("reconnect after grace period expires returns error", async () => {
+    setGracePeriod(50);
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    ws2.terminate();
+    await waitForMessage(ws1);
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    const ws3 = await injectWS();
+    const errorPromise = waitForMessage(ws3);
+    ws3.send(reconnectPayload(session.id, "p2"));
+
+    const error = await errorPromise;
+    expect(error.type).toBe(WsEvent.Error);
+    expect((error as { code: string }).code).toBe("RECONNECT_FAILED");
+
+    ws1.terminate();
+    ws3.terminate();
+  });
+
+  it("reconnecting participant receives missed messages", async () => {
+    setGracePeriod(5000);
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    ws2.terminate();
+    await waitForMessage(ws1);
+
+    const ack1 = waitForMessage(ws1);
+    ws1.send(messagePayload(session.id, "p1", "Alice", "Message while away 1"));
+    await ack1;
+
+    const ack2 = waitForMessage(ws1);
+    ws1.send(messagePayload(session.id, "p1", "Alice", "Message while away 2"));
+    await ack2;
+
+    const ws3 = await injectWS();
+    const received: WsPayload[] = [];
+    const done = new Promise<void>((resolve) => {
+      ws3.on("message", (data: unknown) => {
+        const parsed = JSON.parse(String(data)) as WsPayload;
+        received.push(parsed);
+        if (parsed.type === WsEvent.Presence) resolve();
+      });
+    });
+    ws3.send(reconnectPayload(session.id, "p2"));
+    await done;
+
+    const messages = received.filter(
+      (m) => m.type === WsEvent.Message,
+    ) as MessagePayload[];
+    expect(messages).toHaveLength(2);
+    expect(messages[0].message.content).toBe("Message while away 1");
+    expect(messages[1].message.content).toBe("Message while away 2");
+
+    const presences = received.filter(
+      (m) => m.type === WsEvent.Presence,
+    ) as PresencePayload[];
+    expect(presences).toHaveLength(1);
+    expect(presences[0].participants).toHaveLength(2);
+
+    ws1.terminate();
+    ws3.terminate();
+  });
+
+  it("reconnect to nonexistent participant returns error", async () => {
+    const session = createSession("test");
+    const ws = await injectWS();
+
+    const errorPromise = waitForMessage(ws);
+    ws.send(reconnectPayload(session.id, "nobody"));
+
+    const error = await errorPromise;
+    expect(error.type).toBe(WsEvent.Error);
+    expect((error as { code: string }).code).toBe("RECONNECT_FAILED");
+
+    ws.terminate();
   });
 });
