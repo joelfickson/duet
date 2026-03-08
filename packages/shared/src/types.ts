@@ -31,6 +31,7 @@ export enum WsEvent {
   Join = "join",
   Leave = "leave",
   Message = "message",
+  MessageAck = "message-ack",
   Typing = "typing",
   AiChunk = "ai-chunk",
   Error = "error",
@@ -79,6 +80,13 @@ export interface PresencePayload {
   participants: Participant[];
 }
 
+export interface MessageAckPayload {
+  type: WsEvent.MessageAck;
+  messageId: string;
+  sessionId: string;
+  createdAt: string;
+}
+
 export type WsPayload =
   | JoinPayload
   | LeavePayload
@@ -86,4 +94,5 @@ export type WsPayload =
   | TypingPayload
   | AiChunkPayload
   | ErrorPayload
-  | PresencePayload;
+  | PresencePayload
+  | MessageAckPayload;
