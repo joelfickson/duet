@@ -10,6 +10,7 @@ import {
 } from "../controllers/ws.controller";
 import { addConnection, removeConnection } from "../services/connections";
 import { startHeartbeat, stopHeartbeat } from "../services/heartbeat";
+import { clearRateLimit, isRateLimited } from "../services/rate-limit";
 
 export async function wsRoute(server: FastifyInstance): Promise<void> {
   server.get("/ws", { websocket: true }, (socket, _req) => {
@@ -34,6 +35,20 @@ export async function wsRoute(server: FastifyInstance): Promise<void> {
         return;
       }
 
+      if (
+        (data.type === WsEvent.Message || data.type === WsEvent.Typing) &&
+        isRateLimited(conn.id)
+      ) {
+        log.warn({ connectionId: conn.id }, "rate limited");
+        const errorPayload: WsPayload = {
+          type: WsEvent.Error,
+          code: "RATE_LIMITED",
+          message: "Rate limit exceeded. Please slow down.",
+        };
+        socket.send(JSON.stringify(errorPayload));
+        return;
+      }
+
       switch (data.type) {
         case WsEvent.Join:
           handleJoin(conn, data, log);
@@ -55,6 +70,7 @@ export async function wsRoute(server: FastifyInstance): Promise<void> {
 
     socket.on("close", () => {
       stopHeartbeat(conn.id);
+      clearRateLimit(conn.id);
       handleLeave(conn, log);
       removeConnection(conn.id);
       log.debug("ws connection closed");
@@ -63,6 +79,7 @@ export async function wsRoute(server: FastifyInstance): Promise<void> {
     socket.on("error", (err) => {
       log.error({ err }, "ws connection error");
       stopHeartbeat(conn.id);
+      clearRateLimit(conn.id);
       handleLeave(conn, log);
       removeConnection(conn.id);
     });
