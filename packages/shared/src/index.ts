@@ -9,6 +9,7 @@ export {
   type Participant,
   type PresencePayload,
   type Session,
+  type SessionState,
   type TypingPayload,
   WsEvent,
   type WsPayload,

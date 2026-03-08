@@ -11,6 +11,10 @@ export interface Session {
   participants: Participant[];
 }
 
+export interface SessionState {
+  session: Session;
+}
+
 export type MessageRole = "user" | "assistant";
 
 export interface Message {
