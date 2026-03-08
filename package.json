@@ -8,9 +8,17 @@
   "scripts": {
     "dev": "pnpm --filter @duet/server dev & pnpm --filter @duet/client dev",
     "build": "pnpm -r build",
-    "lint": "biome lint .",
-    "format": "biome format .",
-    "check": "biome check .",
+    "lint": "biome lint --write .",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
     "typecheck": "tsc -b packages/shared packages/server packages/client"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6"
   }
 }

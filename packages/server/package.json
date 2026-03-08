@@ -9,6 +9,12 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@duet/shared": "workspace:*"
+    "@duet/shared": "workspace:*",
+    "fastify": "^5.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }
