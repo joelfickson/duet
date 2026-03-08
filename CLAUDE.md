@@ -54,7 +54,7 @@ docker compose up
 - **pnpm** only - no npm or yarn
 - **TypeScript strict mode** everywhere, extending `tsconfig.base.json` at root
 - Shared types go in `@duet/shared` - both server and client depend on it
-- Server port 3001, client port 3000
+- Server port 8000, client port 8001
 - Environment: `LLM_API_KEY` (required), `DATABASE_PATH` (default `./data/duet.db`), `PORT`, `VITE_WS_URL`, `VITE_API_URL`
 
 ## Issue specs

@@ -1,6 +1,6 @@
-import { buildApp } from "./app.js";
+import { buildApp } from "./app";
 
-const port = Number(process.env.PORT) || 3001;
+const port = Number(process.env.PORT) || 8000;
 const host = process.env.HOST || "0.0.0.0";
 
 const server = await buildApp();
