@@ -11,7 +11,7 @@
     "lint": "biome lint --write .",
     "format": "biome format --write .",
     "check": "biome check --write .",
-    "typecheck": "tsc -b packages/shared packages/server packages/client"
+    "typecheck": "tsc -b packages/shared packages/server && pnpm --filter @duet/client typecheck"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

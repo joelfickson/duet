@@ -8,7 +8,14 @@
     "enabled": true
   },
   "files": {
-    "includes": ["**/*.ts", "**/*.tsx", "**/*.json"],
-    "experimentalScannerIgnores": ["dist/**", "node_modules/**"]
+    "includes": [
+      "**/*.ts",
+      "**/*.tsx",
+      "**/*.json",
+      "!!**/dist",
+      "!!**/node_modules",
+      "!!**/.react-router",
+      "!!**/build"
+    ]
   }
 }
