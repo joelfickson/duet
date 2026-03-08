@@ -5,7 +5,7 @@ import { Input } from "~/components/ui/input";
 import { Card, CardContent } from "~/components/ui/card";
 import { Separator } from "~/components/ui/separator";
 import { Badge } from "~/components/ui/badge";
-import { Users, Sparkles, Zap, ArrowRight, Plus, Link } from "lucide-react";
+import { Users, Sparkles, Zap, ArrowRight, Plus, Github } from "lucide-react";
 import type { Route } from "./+types/home";
 
 export function meta(_args: Route.MetaArgs) {
@@ -136,8 +136,17 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="border-t border-charcoal/20 px-6 py-4 text-center text-xs text-silver/40">
-        Duet - Open source under MIT
+      <footer className="flex items-center justify-center gap-3 border-t border-charcoal/20 px-6 py-4 text-xs text-silver/40">
+        <span>Duet - Open source under MIT</span>
+        <a
+          href="https://github.com/joelfickson/joinduet"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-silver/60 transition-colors hover:text-steel"
+        >
+          <Github className="size-3.5" />
+          Contribute
+        </a>
       </footer>
     </div>
   );
