@@ -7,6 +7,14 @@
   "linter": {
     "enabled": true
   },
+  "overrides": [
+    {
+      "includes": ["packages/client/app/components/ui/**"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ],
   "files": {
     "includes": [
       "**/*.ts",
