@@ -6,12 +6,22 @@ import type {
 } from "@duet/shared";
 import { WsEvent } from "@duet/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildApp } from "./app.js";
-import { clearAllConnections } from "./connections.js";
-import { createSession, destroySession, getAllSessions } from "./sessions.js";
+import type { WebSocket } from "ws";
+import { buildApp } from "./app";
+import { clearAllConnections } from "./services/connections";
+import {
+  createSession,
+  destroySession,
+  getAllSessions,
+} from "./services/sessions";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
+type TestSocket = WebSocket & { terminate(): void };
 let app: App;
+
+async function injectWS(): Promise<TestSocket> {
+  return (await app.injectWS("/ws")) as unknown as TestSocket;
+}
 
 function joinPayload(sessionId: string, id: string, name: string): string {
   return JSON.stringify({
@@ -49,9 +59,7 @@ function messagePayload(
   });
 }
 
-function waitForMessage(ws: {
-  once(event: string, cb: (data: unknown) => void): void;
-}): Promise<WsPayload> {
+function waitForMessage(ws: TestSocket): Promise<WsPayload> {
   return new Promise((resolve) => {
     ws.once("message", (data: unknown) => {
       resolve(JSON.parse(String(data)));
@@ -60,7 +68,7 @@ function waitForMessage(ws: {
 }
 
 beforeEach(async () => {
-  app = await buildApp();
+  app = await buildApp({ logger: false });
   await app.ready();
 });
 
@@ -76,7 +84,7 @@ describe("e2e: participant tracking", () => {
   it("joining a session broadcasts presence to the joiner", async () => {
     const session = createSession("test");
 
-    const ws = await app.injectWS("/ws");
+    const ws = await injectWS();
 
     const msgPromise = waitForMessage(ws);
     ws.send(joinPayload(session.id, "p1", "Alice"));
@@ -93,8 +101,8 @@ describe("e2e: participant tracking", () => {
   it("second participant join broadcasts presence to first participant", async () => {
     const session = createSession("test");
 
-    const ws1 = await app.injectWS("/ws");
-    const ws2 = await app.injectWS("/ws");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
 
     ws1.send(joinPayload(session.id, "p1", "Alice"));
     await waitForMessage(ws1);
@@ -117,8 +125,8 @@ describe("e2e: participant tracking", () => {
   it("disconnecting broadcasts updated presence to remaining members", async () => {
     const session = createSession("test");
 
-    const ws1 = await app.injectWS("/ws");
-    const ws2 = await app.injectWS("/ws");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
 
     ws1.send(joinPayload(session.id, "p1", "Alice"));
     await waitForMessage(ws1);
@@ -142,8 +150,8 @@ describe("e2e: participant tracking", () => {
   it("explicit leave event removes participant and broadcasts", async () => {
     const session = createSession("test");
 
-    const ws1 = await app.injectWS("/ws");
-    const ws2 = await app.injectWS("/ws");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
 
     ws1.send(joinPayload(session.id, "p1", "Alice"));
     await waitForMessage(ws1);
@@ -166,7 +174,7 @@ describe("e2e: participant tracking", () => {
   });
 
   it("joining a nonexistent session returns an error", async () => {
-    const ws = await app.injectWS("/ws");
+    const ws = await injectWS();
 
     const msgPromise = waitForMessage(ws);
     ws.send(joinPayload("nonexistent", "p1", "Alice"));
@@ -180,11 +188,11 @@ describe("e2e: participant tracking", () => {
 
   it("supports many participants in the same session", async () => {
     const session = createSession("test");
-    const sockets: Awaited<ReturnType<typeof app.injectWS>>[] = [];
+    const sockets: TestSocket[] = [];
     const count = 10;
 
     for (let i = 0; i < count; i++) {
-      const ws = await app.injectWS("/ws");
+      const ws = await injectWS();
       sockets.push(ws);
     }
 
@@ -208,7 +216,7 @@ describe("e2e: participant tracking", () => {
   });
 
   it("invalid JSON is ignored without crashing", async () => {
-    const ws = await app.injectWS("/ws");
+    const ws = await injectWS();
     ws.send("not json at all");
 
     const session = createSession("test");
@@ -225,8 +233,8 @@ describe("e2e: participant tracking", () => {
 describe("e2e: message broadcast", () => {
   async function setupTwoParticipants() {
     const session = createSession("test");
-    const ws1 = await app.injectWS("/ws");
-    const ws2 = await app.injectWS("/ws");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
 
     ws1.send(joinPayload(session.id, "p1", "Alice"));
     await waitForMessage(ws1);
@@ -281,7 +289,7 @@ describe("e2e: message broadcast", () => {
 
   it("message from unjoined connection is dropped", async () => {
     const session = createSession("test");
-    const ws = await app.injectWS("/ws");
+    const ws = await injectWS();
 
     ws.send(messagePayload(session.id, "p1", "Alice", "Hello"));
 
@@ -323,7 +331,7 @@ describe("e2e: message broadcast", () => {
 
   it("message broadcasts to multiple participants", async () => {
     const { session, ws1, ws2 } = await setupTwoParticipants();
-    const ws3 = await app.injectWS("/ws");
+    const ws3 = await injectWS();
 
     const p1Promise = waitForMessage(ws1);
     const p2Promise = waitForMessage(ws2);
@@ -354,7 +362,7 @@ describe("e2e: message broadcast", () => {
     ws1.terminate();
     await waitForMessage(ws2);
 
-    const ws3 = await app.injectWS("/ws");
+    const ws3 = await injectWS();
     ws3.send(messagePayload(session.id, "p1", "Alice", "Ghost message"));
 
     const joinPromise = waitForMessage(ws3);
