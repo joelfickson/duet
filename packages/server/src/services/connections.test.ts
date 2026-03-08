@@ -9,7 +9,7 @@ import {
   mapConnectionToSession,
   removeConnection,
   unmapConnectionFromSession,
-} from "./connections.js";
+} from "./connections";
 
 function fakeSocket(): WebSocket {
   return { readyState: 1, OPEN: 1 } as unknown as WebSocket;
