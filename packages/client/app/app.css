@@ -1,35 +1,115 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&display=swap");
 @import "tailwindcss";
+@import "tw-animate-css";
 
-* {
-    font-family: "Fraunces", ui-serif, Georgia, serif !important;
+@custom-variant dark (&:is(.dark *));
+
+:root {
+    --radius: 0.625rem;
+
+    --background: oklch(0.228 0.038 282.9);
+    --foreground: oklch(0.971 0.003 286.4);
+
+    --card: oklch(0.243 0.030 283.9);
+    --card-foreground: oklch(0.971 0.003 286.4);
+
+    --popover: oklch(0.243 0.030 283.9);
+    --popover-foreground: oklch(0.971 0.003 286.4);
+
+    --primary: oklch(0.560 0.078 238.0);
+    --primary-foreground: oklch(1.000 0.000 89.9);
+
+    --secondary: oklch(0.300 0.025 283);
+    --secondary-foreground: oklch(0.971 0.003 286.4);
+
+    --muted: oklch(0.300 0.025 283);
+    --muted-foreground: oklch(0.907 0.000 89.9);
+
+    --accent: oklch(0.411 0.088 249.5);
+    --accent-foreground: oklch(1.000 0.000 89.9);
+
+    --destructive: oklch(0.612 0.208 22.2);
+
+    --border: oklch(0.409 0.000 89.9 / 40%);
+    --input: oklch(0.409 0.000 89.9 / 50%);
+    --ring: oklch(0.560 0.078 238.0);
+
+    --chart-1: oklch(0.560 0.078 238.0);
+    --chart-2: oklch(0.547 0.123 249.8);
+    --chart-3: oklch(0.836 0.083 144.8);
+    --chart-4: oklch(0.612 0.208 22.2);
+    --chart-5: oklch(0.975 0.018 137.8);
+
+    --sidebar: oklch(0.210 0.035 283);
+    --sidebar-foreground: oklch(0.971 0.003 286.4);
+    --sidebar-primary: oklch(0.560 0.078 238.0);
+    --sidebar-primary-foreground: oklch(1.000 0.000 89.9);
+    --sidebar-accent: oklch(0.300 0.025 283);
+    --sidebar-accent-foreground: oklch(0.971 0.003 286.4);
+    --sidebar-border: oklch(0.409 0.000 89.9 / 30%);
+    --sidebar-ring: oklch(0.560 0.078 238.0);
 }
 
-@theme {
-    --font-display: "Fraunces", ui-serif, Georgia, serif;
+@theme inline {
     --font-sans: "DM Sans", system-ui, sans-serif;
+    --font-display: "Fraunces", ui-serif, Georgia, serif;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
 
-    /* Backgrounds */
     --color-midnight: #1a1a2e;
     --color-deep-navy: #1e1e2e;
     --color-charcoal: #4a4a4a;
-
-    /* Brand Accents */
     --color-steel: #457b9d;
     --color-ocean: #2e74b5;
     --color-deep-blue: #1f4d78;
-
-    /* Semantic */
     --color-crimson: #e63946;
     --color-sage: #a8d8a8;
     --color-frost: #f1faee;
-
-    /* Text & Surface */
     --color-cloud: #f5f5f7;
     --color-silver: #e0e0e0;
 }
 
-html,
-body {
-    @apply bg-midnight text-cloud font-sans;
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+    body {
+        @apply bg-background text-foreground font-sans antialiased;
+    }
 }
