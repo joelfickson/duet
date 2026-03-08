@@ -2,6 +2,7 @@ import type {
   MessageAckPayload,
   MessagePayload,
   PresencePayload,
+  TypingPayload,
   WsPayload,
 } from "@duet/shared";
 import { WsEvent } from "@duet/shared";
@@ -14,6 +15,7 @@ import {
   destroySession,
   getAllSessions,
 } from "./services/sessions";
+import { clearAllTyping } from "./services/typing";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 type TestSocket = WebSocket & { terminate(): void };
@@ -59,6 +61,19 @@ function messagePayload(
   });
 }
 
+function typingPayload(
+  sessionId: string,
+  participantId: string,
+  isTyping: boolean,
+): string {
+  return JSON.stringify({
+    type: WsEvent.Typing,
+    sessionId,
+    participantId,
+    isTyping,
+  });
+}
+
 function waitForMessage(ws: TestSocket): Promise<WsPayload> {
   return new Promise((resolve) => {
     ws.once("message", (data: unknown) => {
@@ -77,6 +92,7 @@ afterEach(async () => {
     destroySession(s.id);
   }
   clearAllConnections();
+  clearAllTyping();
   await app.close();
 });
 
@@ -372,5 +388,252 @@ describe("e2e: message broadcast", () => {
 
     ws2.terminate();
     ws3.terminate();
+  });
+});
+
+describe("e2e: presence system", () => {
+  it("join broadcasts presence with full participant list", async () => {
+    const session = createSession("test");
+    const ws1 = await injectWS();
+
+    const msg = waitForMessage(ws1);
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+
+    const presence = (await msg) as PresencePayload;
+    expect(presence.type).toBe(WsEvent.Presence);
+    expect(presence.sessionId).toBe(session.id);
+    expect(presence.participants).toHaveLength(1);
+    expect(presence.participants[0].id).toBe("p1");
+
+    ws1.terminate();
+  });
+
+  it("second join broadcasts updated list to all participants", async () => {
+    const session = createSession("test");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const p1Promise = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+    await waitForMessage(ws2);
+
+    const presence = (await p1Promise) as PresencePayload;
+    expect(presence.type).toBe(WsEvent.Presence);
+    expect(presence.participants).toHaveLength(2);
+    expect(presence.participants.map((p) => p.id)).toContain("p1");
+    expect(presence.participants.map((p) => p.id)).toContain("p2");
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("leave broadcasts updated list to remaining participants", async () => {
+    const session = createSession("test");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const p1Join2 = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+    await waitForMessage(ws2);
+    await p1Join2;
+
+    const leavePresence = waitForMessage(ws1);
+    ws2.send(leavePayload(session.id, "p2"));
+
+    const presence = (await leavePresence) as PresencePayload;
+    expect(presence.type).toBe(WsEvent.Presence);
+    expect(presence.participants).toHaveLength(1);
+    expect(presence.participants[0].id).toBe("p1");
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("disconnect broadcasts updated list to remaining participants", async () => {
+    const session = createSession("test");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const p1Join2 = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+    await waitForMessage(ws2);
+    await p1Join2;
+
+    const leavePresence = waitForMessage(ws1);
+    ws2.terminate();
+
+    const presence = (await leavePresence) as PresencePayload;
+    expect(presence.type).toBe(WsEvent.Presence);
+    expect(presence.participants).toHaveLength(1);
+    expect(presence.participants[0].id).toBe("p1");
+
+    ws1.terminate();
+  });
+
+  it("presence events use shared types", async () => {
+    const session = createSession("test");
+    const ws = await injectWS();
+
+    const msg = waitForMessage(ws);
+    ws.send(joinPayload(session.id, "p1", "Alice"));
+
+    const presence = (await msg) as PresencePayload;
+    expect(presence).toHaveProperty("type");
+    expect(presence).toHaveProperty("sessionId");
+    expect(presence).toHaveProperty("participants");
+    expect(presence.participants[0]).toHaveProperty("id");
+    expect(presence.participants[0]).toHaveProperty("name");
+    expect(presence.participants[0]).toHaveProperty("connectedAt");
+
+    ws.terminate();
+  });
+});
+
+describe("e2e: typing indicators", () => {
+  async function setupTwoJoined() {
+    const session = createSession("test");
+    const ws1 = await injectWS();
+    const ws2 = await injectWS();
+
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await waitForMessage(ws1);
+
+    const p1Presence = waitForMessage(ws1);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+    await waitForMessage(ws2);
+    await p1Presence;
+
+    return { session, ws1, ws2 };
+  }
+
+  it("typing:start broadcasts to other participants", async () => {
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    const typingPromise = waitForMessage(ws2);
+    ws1.send(typingPayload(session.id, "p1", true));
+
+    const msg = (await typingPromise) as TypingPayload;
+    expect(msg.type).toBe(WsEvent.Typing);
+    expect(msg.sessionId).toBe(session.id);
+    expect(msg.participantId).toBe("p1");
+    expect(msg.isTyping).toBe(true);
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("typing:stop broadcasts to other participants", async () => {
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    const startPromise = waitForMessage(ws2);
+    ws1.send(typingPayload(session.id, "p1", true));
+    await startPromise;
+
+    const stopPromise = waitForMessage(ws2);
+    ws1.send(typingPayload(session.id, "p1", false));
+
+    const msg = (await stopPromise) as TypingPayload;
+    expect(msg.type).toBe(WsEvent.Typing);
+    expect(msg.participantId).toBe("p1");
+    expect(msg.isTyping).toBe(false);
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("typing auto-stops after 3 second timeout", async () => {
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    const startPromise = waitForMessage(ws2);
+    ws1.send(typingPayload(session.id, "p1", true));
+    await startPromise;
+
+    const stopPromise = waitForMessage(ws2);
+    const stop = (await stopPromise) as TypingPayload;
+    expect(stop.type).toBe(WsEvent.Typing);
+    expect(stop.participantId).toBe("p1");
+    expect(stop.isTyping).toBe(false);
+
+    ws1.terminate();
+    ws2.terminate();
+  }, 5000);
+
+  it("typing from unjoined connection is ignored", async () => {
+    const session = createSession("test");
+    const ws = await injectWS();
+
+    ws.send(typingPayload(session.id, "p1", true));
+
+    const joinMsg = waitForMessage(ws);
+    ws.send(joinPayload(session.id, "p1", "Alice"));
+    const msg = await joinMsg;
+    expect(msg.type).toBe(WsEvent.Presence);
+
+    ws.terminate();
+  });
+
+  it("typing is cleared when participant leaves", async () => {
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    const startPromise = waitForMessage(ws2);
+    ws1.send(typingPayload(session.id, "p1", true));
+    await startPromise;
+
+    const stopPromise = waitForMessage(ws2);
+    ws1.send(leavePayload(session.id, "p1"));
+
+    const stop = (await stopPromise) as TypingPayload;
+    expect(stop.type).toBe(WsEvent.Typing);
+    expect(stop.participantId).toBe("p1");
+    expect(stop.isTyping).toBe(false);
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("typing is cleared when participant disconnects", async () => {
+    const { ws1, ws2 } = await setupTwoJoined();
+
+    const startPromise = waitForMessage(ws2);
+    ws1.send(typingPayload("ignored", "p1", true));
+    await startPromise;
+
+    const stopPromise = waitForMessage(ws2);
+    ws1.terminate();
+
+    const stop = (await stopPromise) as TypingPayload;
+    expect(stop.type).toBe(WsEvent.Typing);
+    expect(stop.participantId).toBe("p1");
+    expect(stop.isTyping).toBe(false);
+
+    ws2.terminate();
+  });
+
+  it("sending a message clears typing state", async () => {
+    const { session, ws1, ws2 } = await setupTwoJoined();
+
+    const startPromise = waitForMessage(ws2);
+    ws1.send(typingPayload(session.id, "p1", true));
+    await startPromise;
+
+    const stopPromise = waitForMessage(ws2);
+    ws1.send(messagePayload(session.id, "p1", "Alice", "Hello"));
+
+    const stop = (await stopPromise) as TypingPayload;
+    expect(stop.type).toBe(WsEvent.Typing);
+    expect(stop.participantId).toBe("p1");
+    expect(stop.isTyping).toBe(false);
+
+    ws1.terminate();
+    ws2.terminate();
   });
 });
