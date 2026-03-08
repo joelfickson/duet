@@ -5,9 +5,7 @@
     "**/.client/**/*",
     ".react-router/types/**/*"
   ],
-  "exclude": [
-    "app/components/ui/chart.tsx"
-  ],
+  "exclude": ["app/components/ui/chart.tsx"],
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "types": ["node", "vite/client"],
