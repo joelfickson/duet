@@ -15,6 +15,13 @@ import {
 } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { Separator } from "~/components/ui/separator";
 import { useCreateSession } from "~/hooks/use-sessions";
 import type { Route } from "./+types/home";
@@ -56,17 +63,64 @@ function FeatureCard({
   );
 }
 
+type Provider = "anthropic" | "gemini" | "openrouter";
+
+const providerModels: Record<Provider, { value: string; label: string }[]> = {
+  anthropic: [
+    { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+    { value: "claude-haiku-4-20250414", label: "Claude Haiku 4" },
+    { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
+  ],
+  gemini: [
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+  ],
+  openrouter: [
+    {
+      value: "meta-llama/llama-3.1-8b-instruct:free",
+      label: "Llama 3.1 8B (free)",
+    },
+    {
+      value: "google/gemma-2-9b-it:free",
+      label: "Gemma 2 9B (free)",
+    },
+    {
+      value: "mistralai/mistral-7b-instruct:free",
+      label: "Mistral 7B (free)",
+    },
+    {
+      value: "qwen/qwen3-8b:free",
+      label: "Qwen3 8B (free)",
+    },
+  ],
+};
+
 function CreateSessionDialog() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [provider, setProvider] = useState<Provider>("anthropic");
+  const [model, setModel] = useState(providerModels.anthropic[0].value);
   const createSession = useCreateSession();
+
+  function handleProviderChange(p: Provider) {
+    setProvider(p);
+    setModel(providerModels[p][0].value);
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!displayName.trim()) return;
     createSession.mutate(
-      { title: title.trim() || undefined, displayName: displayName.trim() },
+      {
+        title: title.trim() || undefined,
+        displayName: displayName.trim(),
+        apiKey: apiKey.trim() || undefined,
+        provider,
+        model,
+      },
       {
         onSuccess: () => setOpen(false),
       },
@@ -118,6 +172,82 @@ function CreateSessionDialog() {
               onChange={(e) => setTitle(e.target.value)}
               className="border-charcoal/50 bg-midnight text-cloud placeholder:text-silver/40"
             />
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-silver">AI provider</Label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleProviderChange("anthropic")}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  provider === "anthropic"
+                    ? "border-steel bg-steel/10 text-cloud"
+                    : "border-charcoal/50 bg-midnight text-silver/60 hover:border-charcoal"
+                }`}
+              >
+                Anthropic
+              </button>
+              <button
+                type="button"
+                onClick={() => handleProviderChange("gemini")}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  provider === "gemini"
+                    ? "border-steel bg-steel/10 text-cloud"
+                    : "border-charcoal/50 bg-midnight text-silver/60 hover:border-charcoal"
+                }`}
+              >
+                Gemini
+              </button>
+              <button
+                type="button"
+                onClick={() => handleProviderChange("openrouter")}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm transition-colors ${
+                  provider === "openrouter"
+                    ? "border-steel bg-steel/10 text-cloud"
+                    : "border-charcoal/50 bg-midnight text-silver/60 hover:border-charcoal"
+                }`}
+              >
+                OpenRouter
+              </button>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label className="text-silver">Model</Label>
+            <Select value={model} onValueChange={setModel}>
+              <SelectTrigger className="border-charcoal/50 bg-midnight text-cloud">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-charcoal/40 bg-deep-navy">
+                {providerModels[provider].map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="api-key" className="text-silver">
+              API key
+              <span className="ml-1 text-silver/40">(optional)</span>
+            </Label>
+            <Input
+              id="api-key"
+              type="password"
+              placeholder={
+                provider === "anthropic"
+                  ? "sk-ant-..."
+                  : provider === "gemini"
+                    ? "AIza..."
+                    : "sk-or-..."
+              }
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              className="border-charcoal/50 bg-midnight text-cloud placeholder:text-silver/40"
+            />
+            <p className="text-xs text-silver/40">
+              Uses the server key if not provided.
+            </p>
           </div>
           {createSession.isError && (
             <p className="text-sm text-red-400">
