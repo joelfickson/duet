@@ -98,7 +98,7 @@ function waitForMessage(ws: TestSocket): Promise<WsPayload> {
 }
 
 beforeEach(async () => {
-  app = await buildApp({ logger: false });
+  app = await buildApp({ logger: false, skipMigrations: true });
   await app.ready();
 });
 
