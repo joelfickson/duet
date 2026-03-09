@@ -1,23 +1,27 @@
 # Contributing to Duet
 
+Thanks for your interest in contributing. This guide covers setup and conventions.
+
 ## Prerequisites
 
 - Node.js 24+
-- pnpm (`npm install -g pnpm`)
+- pnpm 9+ (`npm install -g pnpm`)
 
 ## Setup
 
 ```bash
-git clone https://github.com/joelfickson/duet.git
-cd duet
+git clone https://github.com/joelfickson/joinduet.git
+cd joinduet
 pnpm install
+cp .env.example .env  # then add your API key(s)
 ```
 
 ## Development
 
 ```bash
-pnpm --filter @duet/server dev    # start server
-pnpm --filter @duet/client dev    # start client
+pnpm dev                             # start both server and client
+pnpm --filter @duet/server dev       # server only (:8000)
+pnpm --filter @duet/client dev       # client only (:8001)
 ```
 
 ## Code quality
@@ -36,7 +40,6 @@ pnpm typecheck   # TypeScript type checking
 ```bash
 pnpm test                          # all packages
 pnpm --filter @duet/server test    # server only
-pnpm --filter @duet/client test    # client only
 ```
 
 ## Branch conventions
@@ -57,3 +60,9 @@ docs: add API documentation
 ```
 
 Keep the first line under 100 characters.
+
+## Pull requests
+
+- Fill out the PR template
+- Make sure CI passes (`pnpm check`, `pnpm typecheck`, `pnpm test`)
+- Keep changes focused - one feature or fix per PR
