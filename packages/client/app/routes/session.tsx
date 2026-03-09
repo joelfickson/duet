@@ -1,7 +1,9 @@
 import type { Message } from "@duet/shared";
 import { Copy, LogOut, Send, Users } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Markdown from "react-markdown";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
+import remarkGfm from "remark-gfm";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Separator } from "~/components/ui/separator";
@@ -11,6 +13,92 @@ function generateParticipantId() {
   return crypto.randomUUID();
 }
 
+const remarkPlugins = [remarkGfm];
+
+function MarkdownContent({ content }: { content: string }) {
+  return (
+    <Markdown
+      remarkPlugins={remarkPlugins}
+      components={{
+        p: ({ children }) => (
+          <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>
+        ),
+        strong: ({ children }) => (
+          <strong className="font-semibold">{children}</strong>
+        ),
+        em: ({ children }) => <em className="italic">{children}</em>,
+        code: ({ children, className }) => {
+          const isBlock = className?.includes("language-");
+          if (isBlock) {
+            return (
+              <code className="block overflow-x-auto rounded-md bg-midnight/80 px-3 py-2 font-mono text-xs text-cloud/90">
+                {children}
+              </code>
+            );
+          }
+          return (
+            <code className="rounded bg-midnight/60 px-1.5 py-0.5 font-mono text-xs text-cloud/90">
+              {children}
+            </code>
+          );
+        },
+        pre: ({ children }) => <pre className="my-2">{children}</pre>,
+        ul: ({ children }) => (
+          <ul className="mb-2 ml-4 list-disc space-y-1 last:mb-0">
+            {children}
+          </ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="mb-2 ml-4 list-decimal space-y-1 last:mb-0">
+            {children}
+          </ol>
+        ),
+        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+        h1: ({ children }) => (
+          <h1 className="mb-2 text-lg font-semibold">{children}</h1>
+        ),
+        h2: ({ children }) => (
+          <h2 className="mb-2 text-base font-semibold">{children}</h2>
+        ),
+        h3: ({ children }) => (
+          <h3 className="mb-1 text-sm font-semibold">{children}</h3>
+        ),
+        blockquote: ({ children }) => (
+          <blockquote className="my-2 border-l-2 border-steel/30 pl-3 text-silver/70">
+            {children}
+          </blockquote>
+        ),
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-steel underline underline-offset-2 hover:text-ocean"
+          >
+            {children}
+          </a>
+        ),
+        hr: () => <hr className="my-3 border-charcoal/30" />,
+        table: ({ children }) => (
+          <div className="my-2 overflow-x-auto">
+            <table className="w-full text-left text-xs">{children}</table>
+          </div>
+        ),
+        th: ({ children }) => (
+          <th className="border border-charcoal/30 px-2 py-1 font-semibold">
+            {children}
+          </th>
+        ),
+        td: ({ children }) => (
+          <td className="border border-charcoal/30 px-2 py-1">{children}</td>
+        ),
+      }}
+    >
+      {content}
+    </Markdown>
+  );
+}
+
 function MessageBubble({
   message,
   isOwn,
@@ -18,13 +106,15 @@ function MessageBubble({
   message: Message;
   isOwn: boolean;
 }) {
+  const isAi = message.role === "assistant";
+
   return (
     <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[75%] rounded-xl px-4 py-2.5 ${
           isOwn
             ? "bg-steel/20 text-cloud"
-            : message.role === "assistant"
+            : isAi
               ? "bg-ocean/10 border border-ocean/20 text-cloud"
               : "bg-charcoal/30 text-cloud"
         }`}
@@ -34,15 +124,44 @@ function MessageBubble({
             {message.senderName}
           </p>
         )}
-        <p className="text-sm leading-relaxed whitespace-pre-wrap">
-          {message.content}
-        </p>
+        {isAi && <p className="mb-1 text-xs font-medium text-ocean">AI</p>}
+        <div className="text-sm">
+          {isAi ? (
+            <MarkdownContent content={message.content} />
+          ) : (
+            <p className="leading-relaxed whitespace-pre-wrap">
+              {message.content}
+            </p>
+          )}
+        </div>
         <p className="mt-1 text-right text-[10px] text-silver/30">
           {new Date(message.createdAt).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           })}
         </p>
+      </div>
+    </div>
+  );
+}
+
+function StreamingBubble({ content }: { content: string }) {
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[75%] rounded-xl border border-ocean/20 bg-ocean/10 px-4 py-2.5 text-cloud">
+        <p className="mb-1 text-xs font-medium text-ocean">AI</p>
+        {content ? (
+          <div className="text-sm">
+            <MarkdownContent content={content} />
+            <span className="inline-block h-4 w-0.5 animate-pulse bg-ocean/60" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 py-1">
+            <span className="size-1.5 animate-bounce rounded-full bg-ocean/60 [animation-delay:0ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-ocean/60 [animation-delay:150ms]" />
+            <span className="size-1.5 animate-bounce rounded-full bg-ocean/60 [animation-delay:300ms]" />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -62,7 +181,7 @@ function MessageInput() {
   const sendMessage = useSessionStore((s) => s.sendMessage);
   const sendTyping = useSessionStore((s) => s.sendTyping);
   const typingRef = useRef(false);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -200,6 +319,7 @@ export default function Session() {
   const typingParticipants = useSessionStore((s) => s.typingParticipants);
   const aiStreamingContent = useSessionStore((s) => s.aiStreamingContent);
   const isAiStreaming = useSessionStore((s) => s.isAiStreaming);
+  const aiError = useSessionStore((s) => s.aiError);
   const error = useSessionStore((s) => s.error);
   const disconnect = useSessionStore((s) => s.disconnect);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -207,6 +327,12 @@ export default function Session() {
   const typingNames = participants
     .filter((p) => typingParticipants.has(p.id) && p.id !== participantId)
     .map((p) => p.name);
+
+  const scrollTrigger = `${messages.length}-${aiStreamingContent.length}-${isAiStreaming}`;
+  useEffect(() => {
+    void scrollTrigger;
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [scrollTrigger]);
 
   function handleLeave() {
     disconnect();
@@ -266,18 +392,13 @@ export default function Session() {
                 isOwn={m.senderId === participantId}
               />
             ))}
-            {isAiStreaming && aiStreamingContent && (
-              <div className="flex justify-start">
-                <div className="max-w-[75%] rounded-xl border border-ocean/20 bg-ocean/10 px-4 py-2.5 text-cloud">
-                  <p className="mb-1 text-xs font-medium text-ocean">AI</p>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                    {aiStreamingContent}
-                    <span className="inline-block h-4 w-1 animate-pulse bg-ocean/60" />
-                  </p>
-                </div>
+            {isAiStreaming && <StreamingBubble content={aiStreamingContent} />}
+            <TypingIndicator names={typingNames} />
+            {aiError && (
+              <div className="rounded-lg border border-red-400/20 bg-red-400/5 px-4 py-2 text-center text-sm text-red-400/80">
+                {aiError}
               </div>
             )}
-            <TypingIndicator names={typingNames} />
             {error && (
               <p className="text-center text-xs text-red-400/70">{error}</p>
             )}
