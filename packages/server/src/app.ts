@@ -1,10 +1,23 @@
+import cors from "@fastify/cors";
 import websocket from "@fastify/websocket";
 import Fastify, { type FastifyServerOptions } from "fastify";
+import { initDatabase } from "./db/database";
+import { runMigrations } from "./db/migrate";
 import { healthRoute } from "./routes/health";
 import { sessionsRoute } from "./routes/sessions";
 import { wsRoute } from "./routes/ws";
 
-export async function buildApp(opts: FastifyServerOptions = {}) {
+export interface AppOptions extends FastifyServerOptions {
+  dbPath?: string;
+  skipMigrations?: boolean;
+}
+
+export async function buildApp(opts: AppOptions = {}) {
+  if (!opts.skipMigrations) {
+    const db = initDatabase(opts.dbPath);
+    runMigrations(db);
+  }
+
   const server = Fastify({
     logger: opts.logger ?? {
       level: process.env.LOG_LEVEL ?? "info",
@@ -12,6 +25,7 @@ export async function buildApp(opts: FastifyServerOptions = {}) {
     ...opts,
   });
 
+  await server.register(cors, { origin: true });
   await server.register(websocket);
   await server.register(healthRoute);
   await server.register(sessionsRoute);
