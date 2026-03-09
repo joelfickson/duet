@@ -46,6 +46,7 @@ export enum WsEvent {
   Error = "error",
   Presence = "presence",
   Reconnect = "reconnect",
+  History = "history",
 }
 
 export interface JoinPayload {
@@ -117,6 +118,12 @@ export interface ReconnectPayload {
   participantId: string;
 }
 
+export interface HistoryPayload {
+  type: WsEvent.History;
+  sessionId: string;
+  messages: Message[];
+}
+
 export type WsPayload =
   | JoinPayload
   | LeavePayload
@@ -128,4 +135,5 @@ export type WsPayload =
   | ErrorPayload
   | PresencePayload
   | MessageAckPayload
-  | ReconnectPayload;
+  | ReconnectPayload
+  | HistoryPayload;
