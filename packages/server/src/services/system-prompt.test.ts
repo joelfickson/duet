@@ -1,14 +1,16 @@
 import type { Participant } from "@duet/shared";
 import { describe, expect, it } from "vitest";
-import { buildSystemPrompt } from "./system-prompt";
+import SystemPromptService from "./system-prompt";
 
-describe("buildSystemPrompt", () => {
+describe("SystemPromptService", () => {
+  const service = new SystemPromptService();
+
   it("includes participant count", () => {
     const participants: Participant[] = [
       { id: "1", name: "Alice", connectedAt: new Date().toISOString() },
       { id: "2", name: "Bob", connectedAt: new Date().toISOString() },
     ];
-    const prompt = buildSystemPrompt(participants);
+    const prompt = service.build(participants);
     expect(prompt).toContain("(2)");
   });
 
@@ -17,7 +19,7 @@ describe("buildSystemPrompt", () => {
       { id: "1", name: "Alice", connectedAt: new Date().toISOString() },
       { id: "2", name: "Bob", connectedAt: new Date().toISOString() },
     ];
-    const prompt = buildSystemPrompt(participants);
+    const prompt = service.build(participants);
     expect(prompt).toContain("Alice, Bob");
   });
 
@@ -25,13 +27,13 @@ describe("buildSystemPrompt", () => {
     const participants: Participant[] = [
       { id: "1", name: "Alice", connectedAt: new Date().toISOString() },
     ];
-    const prompt = buildSystemPrompt(participants);
+    const prompt = service.build(participants);
     expect(prompt).toContain("(1)");
     expect(prompt).toContain("Alice");
   });
 
   it("handles empty participants", () => {
-    const prompt = buildSystemPrompt([]);
+    const prompt = service.build([]);
     expect(prompt).toContain("(0)");
   });
 });

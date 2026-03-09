@@ -9,98 +9,99 @@ export interface Connection {
   participantId: string | null;
 }
 
-const connections = new Map<string, Connection>();
-const sessionConnections = new Map<string, Set<string>>();
-const connectionSession = new Map<string, string>();
+export default class ConnectionService {
+  private connections = new Map<string, Connection>();
+  private sessionConnections = new Map<string, Set<string>>();
+  private connectionSession = new Map<string, string>();
 
-export function addConnection(socket: WebSocket): Connection {
-  const connection: Connection = {
-    id: randomUUID(),
-    socket,
-    connectedAt: new Date().toISOString(),
-    sessionId: null,
-    participantId: null,
-  };
-  connections.set(connection.id, connection);
-  return connection;
-}
-
-export function removeConnection(id: string): void {
-  const conn = connections.get(id);
-  if (conn?.sessionId) {
-    unmapConnectionFromSession(id);
+  add(socket: WebSocket): Connection {
+    const connection: Connection = {
+      id: randomUUID(),
+      socket,
+      connectedAt: new Date().toISOString(),
+      sessionId: null,
+      participantId: null,
+    };
+    this.connections.set(connection.id, connection);
+    return connection;
   }
-  connections.delete(id);
-}
 
-export function getConnection(id: string): Connection | undefined {
-  return connections.get(id);
-}
-
-export function getAllConnections(): Map<string, Connection> {
-  return connections;
-}
-
-export function mapConnectionToSession(
-  connectionId: string,
-  sessionId: string,
-  participantId: string,
-): void {
-  const conn = connections.get(connectionId);
-  if (!conn) return;
-
-  conn.sessionId = sessionId;
-  conn.participantId = participantId;
-
-  connectionSession.set(connectionId, sessionId);
-
-  let connSet = sessionConnections.get(sessionId);
-  if (!connSet) {
-    connSet = new Set();
-    sessionConnections.set(sessionId, connSet);
+  remove(id: string): void {
+    const conn = this.connections.get(id);
+    if (conn?.sessionId) {
+      this.unmapFromSession(id);
+    }
+    this.connections.delete(id);
   }
-  connSet.add(connectionId);
-}
 
-export function unmapConnectionFromSession(connectionId: string): void {
-  const sessionId = connectionSession.get(connectionId);
-  if (!sessionId) return;
+  get(id: string): Connection | undefined {
+    return this.connections.get(id);
+  }
 
-  connectionSession.delete(connectionId);
+  getAll(): Map<string, Connection> {
+    return this.connections;
+  }
 
-  const connSet = sessionConnections.get(sessionId);
-  if (connSet) {
-    connSet.delete(connectionId);
-    if (connSet.size === 0) {
-      sessionConnections.delete(sessionId);
+  mapToSession(
+    connectionId: string,
+    sessionId: string,
+    participantId: string,
+  ): void {
+    const conn = this.connections.get(connectionId);
+    if (!conn) return;
+
+    conn.sessionId = sessionId;
+    conn.participantId = participantId;
+    this.connectionSession.set(connectionId, sessionId);
+
+    let connSet = this.sessionConnections.get(sessionId);
+    if (!connSet) {
+      connSet = new Set();
+      this.sessionConnections.set(sessionId, connSet);
+    }
+    connSet.add(connectionId);
+  }
+
+  unmapFromSession(connectionId: string): void {
+    const sessionId = this.connectionSession.get(connectionId);
+    if (!sessionId) return;
+
+    this.connectionSession.delete(connectionId);
+
+    const connSet = this.sessionConnections.get(sessionId);
+    if (connSet) {
+      connSet.delete(connectionId);
+      if (connSet.size === 0) {
+        this.sessionConnections.delete(sessionId);
+      }
+    }
+
+    const conn = this.connections.get(connectionId);
+    if (conn) {
+      conn.sessionId = null;
+      conn.participantId = null;
     }
   }
 
-  const conn = connections.get(connectionId);
-  if (conn) {
-    conn.sessionId = null;
-    conn.participantId = null;
+  getForSession(sessionId: string): Connection[] {
+    const connSet = this.sessionConnections.get(sessionId);
+    if (!connSet) return [];
+
+    const result: Connection[] = [];
+    for (const connId of connSet) {
+      const conn = this.connections.get(connId);
+      if (conn) result.push(conn);
+    }
+    return result;
   }
-}
 
-export function getConnectionsForSession(sessionId: string): Connection[] {
-  const connSet = sessionConnections.get(sessionId);
-  if (!connSet) return [];
-
-  const result: Connection[] = [];
-  for (const connId of connSet) {
-    const conn = connections.get(connId);
-    if (conn) result.push(conn);
+  getSessionForConnection(connectionId: string): string | null {
+    return this.connectionSession.get(connectionId) ?? null;
   }
-  return result;
-}
 
-export function getSessionForConnection(connectionId: string): string | null {
-  return connectionSession.get(connectionId) ?? null;
-}
-
-export function clearAllConnections(): void {
-  connections.clear();
-  sessionConnections.clear();
-  connectionSession.clear();
+  clearAll(): void {
+    this.connections.clear();
+    this.sessionConnections.clear();
+    this.connectionSession.clear();
+  }
 }

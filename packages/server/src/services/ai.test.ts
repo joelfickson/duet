@@ -1,47 +1,57 @@
 import { describe, expect, it } from "vitest";
-import {
-  addMessageToHistory,
-  clearSessionState,
-  getMessageHistory,
-  getSessionApiKey,
-  getSessionProvider,
-  setSessionConfig,
-} from "./ai";
+import AiService from "./ai";
+import type BroadcastService from "./broadcast";
+import type ContextService from "./context";
+import type RetryService from "./retry";
+import type SessionService from "./sessions";
+import type SystemPromptService from "./system-prompt";
 
-describe("session config", () => {
+function createAiService(): AiService {
+  return new AiService(
+    {} as BroadcastService,
+    {} as ContextService,
+    {} as SessionService,
+    {} as SystemPromptService,
+    {} as RetryService,
+  );
+}
+
+describe("AiService config", () => {
   it("returns null when no key is set and no env var", () => {
     const original = process.env.ANTHROPIC_API_KEY;
     const originalGemini = process.env.GEMINI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GEMINI_API_KEY;
-    const key = getSessionApiKey("no-key-session");
+    const service = createAiService();
+    const key = service.getSessionApiKey("no-key-session");
     expect(key).toBeNull();
     if (original) process.env.ANTHROPIC_API_KEY = original;
     if (originalGemini) process.env.GEMINI_API_KEY = originalGemini;
   });
 
   it("stores and retrieves a session key", () => {
-    setSessionConfig("s1", "sk-test-123");
-    expect(getSessionApiKey("s1")).toBe("sk-test-123");
-    clearSessionState("s1");
+    const service = createAiService();
+    service.setSessionConfig("s1", "sk-test-123");
+    expect(service.getSessionApiKey("s1")).toBe("sk-test-123");
   });
 
   it("defaults provider to anthropic", () => {
-    setSessionConfig("s3", "sk-test");
-    expect(getSessionProvider("s3")).toBe("anthropic");
-    clearSessionState("s3");
+    const service = createAiService();
+    service.setSessionConfig("s3", "sk-test");
+    expect(service.getSessionProvider("s3")).toBe("anthropic");
   });
 
   it("stores provider preference", () => {
-    setSessionConfig("s4", "gemini-key", "gemini");
-    expect(getSessionProvider("s4")).toBe("gemini");
-    expect(getSessionApiKey("s4")).toBe("gemini-key");
-    clearSessionState("s4");
+    const service = createAiService();
+    service.setSessionConfig("s4", "gemini-key", "gemini");
+    expect(service.getSessionProvider("s4")).toBe("gemini");
+    expect(service.getSessionApiKey("s4")).toBe("gemini-key");
   });
 
   it("clears session state", () => {
-    setSessionConfig("s2", "sk-test-456");
-    addMessageToHistory("s2", {
+    const service = createAiService();
+    service.setSessionConfig("s2", "sk-test-456");
+    service.addMessageToHistory("s2", {
       id: "m1",
       sessionId: "s2",
       senderId: "u1",
@@ -50,19 +60,21 @@ describe("session config", () => {
       role: "user",
       createdAt: new Date().toISOString(),
     });
-    clearSessionState("s2");
-    expect(getMessageHistory("s2")).toEqual([]);
+    service.clearSessionState("s2");
+    expect(service.getMessageHistory("s2")).toEqual([]);
   });
 });
 
-describe("message history", () => {
+describe("AiService message history", () => {
   it("starts empty", () => {
-    expect(getMessageHistory("empty-session")).toEqual([]);
+    const service = createAiService();
+    expect(service.getMessageHistory("empty-session")).toEqual([]);
   });
 
   it("accumulates messages", () => {
+    const service = createAiService();
     const sessionId = "hist-test";
-    addMessageToHistory(sessionId, {
+    service.addMessageToHistory(sessionId, {
       id: "m1",
       sessionId,
       senderId: "u1",
@@ -71,7 +83,7 @@ describe("message history", () => {
       role: "user",
       createdAt: new Date().toISOString(),
     });
-    addMessageToHistory(sessionId, {
+    service.addMessageToHistory(sessionId, {
       id: "m2",
       sessionId,
       senderId: "u2",
@@ -80,10 +92,9 @@ describe("message history", () => {
       role: "user",
       createdAt: new Date().toISOString(),
     });
-    const history = getMessageHistory(sessionId);
+    const history = service.getMessageHistory(sessionId);
     expect(history).toHaveLength(2);
     expect(history[0].content).toBe("first");
     expect(history[1].content).toBe("second");
-    clearSessionState(sessionId);
   });
 });

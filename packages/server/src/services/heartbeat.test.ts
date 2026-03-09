@@ -1,10 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  clearAllHeartbeats,
-  setHeartbeatConfig,
-  startHeartbeat,
-  stopHeartbeat,
-} from "./heartbeat";
+import HeartbeatService from "./heartbeat";
 
 function fakeSocket() {
   const listeners: Record<string, Array<() => void>> = {};
@@ -22,20 +17,23 @@ function fakeSocket() {
   };
 }
 
-describe("heartbeat", () => {
+describe("HeartbeatService", () => {
+  let service: HeartbeatService;
+
   beforeEach(() => {
     vi.useFakeTimers();
-    setHeartbeatConfig(100, 2);
+    service = new HeartbeatService();
+    service.setConfig(100, 2);
   });
 
   afterEach(() => {
-    clearAllHeartbeats();
+    service.clearAll();
     vi.useRealTimers();
   });
 
   it("sends pings at the configured interval", () => {
     const socket = fakeSocket();
-    startHeartbeat("c1", socket as never, vi.fn());
+    service.start("c1", socket as never, vi.fn());
 
     vi.advanceTimersByTime(100);
     expect(socket.ping).toHaveBeenCalledTimes(1);
@@ -47,7 +45,7 @@ describe("heartbeat", () => {
   it("resets missed count on pong", () => {
     const socket = fakeSocket();
     const onDead = vi.fn();
-    startHeartbeat("c1", socket as never, onDead);
+    service.start("c1", socket as never, onDead);
 
     vi.advanceTimersByTime(100);
     vi.advanceTimersByTime(100);
@@ -62,7 +60,7 @@ describe("heartbeat", () => {
   it("calls onDead after exceeding max missed pongs", () => {
     const socket = fakeSocket();
     const onDead = vi.fn();
-    startHeartbeat("c1", socket as never, onDead);
+    service.start("c1", socket as never, onDead);
 
     vi.advanceTimersByTime(100);
     vi.advanceTimersByTime(100);
@@ -71,12 +69,12 @@ describe("heartbeat", () => {
     expect(onDead).toHaveBeenCalledTimes(1);
   });
 
-  it("stopHeartbeat cancels the interval", () => {
+  it("stop cancels the interval", () => {
     const socket = fakeSocket();
     const onDead = vi.fn();
-    startHeartbeat("c1", socket as never, onDead);
+    service.start("c1", socket as never, onDead);
 
-    stopHeartbeat("c1");
+    service.stop("c1");
     vi.advanceTimersByTime(1000);
 
     expect(socket.ping).not.toHaveBeenCalled();

@@ -1,243 +1,273 @@
 import type { WsPayload } from "@duet/shared";
 import { WsEvent } from "@duet/shared";
-import type { FastifyBaseLogger } from "fastify";
-import { addMessageToHistory, triggerAiResponse } from "../services/ai";
-import { broadcastPresence, broadcastToSession } from "../services/broadcast";
+import type { FastifyBaseLogger, FastifyInstance } from "fastify";
 import type { Connection } from "../services/connections";
-import {
-  getSessionForConnection,
-  mapConnectionToSession,
-  unmapConnectionFromSession,
-} from "../services/connections";
-import { createMessage, validateMessageContent } from "../services/messages";
-import {
-  bufferMessage,
-  stashDisconnected,
-  tryReconnect,
-} from "../services/reconnection";
-import {
-  getParticipants,
-  joinSession,
-  leaveSession,
-} from "../services/sessions";
-import { clearTyping, isTyping, setTyping } from "../services/typing";
 
-function sendError(conn: Connection, code: string, message: string): void {
-  const payload: WsPayload = {
-    type: WsEvent.Error,
-    code,
-    message,
-  };
-  conn.socket.send(JSON.stringify(payload));
-}
+export default class WsController {
+  constructor(private server: FastifyInstance) {}
 
-export function handleJoin(
-  conn: Connection,
-  data: WsPayload,
-  log: FastifyBaseLogger,
-): void {
-  if (data.type !== WsEvent.Join) return;
+  handleJoin(conn: Connection, data: WsPayload, log: FastifyBaseLogger): void {
+    if (data.type !== WsEvent.Join) return;
 
-  const session = joinSession(data.sessionId, data.participant);
-  if (!session) {
-    log.warn({ sessionId: data.sessionId }, "join failed: session not found");
-    sendError(conn, "SESSION_NOT_FOUND", `Session ${data.sessionId} not found`);
-    return;
-  }
+    const { sessionService, connectionService, broadcastService } = this.server;
 
-  mapConnectionToSession(conn.id, data.sessionId, data.participant.id);
-  log.info(
-    { sessionId: data.sessionId, participantId: data.participant.id },
-    "participant joined",
-  );
-  broadcastPresence(data.sessionId);
-}
+    const session = sessionService.join(data.sessionId, data.participant);
+    if (!session) {
+      log.warn({ sessionId: data.sessionId }, "join failed: session not found");
+      this.sendError(
+        conn,
+        "SESSION_NOT_FOUND",
+        `Session ${data.sessionId} not found`,
+      );
+      return;
+    }
 
-export function handleLeave(conn: Connection, log: FastifyBaseLogger): void {
-  const sessionId = getSessionForConnection(conn.id);
-  if (!sessionId || !conn.participantId) return;
-
-  if (isTyping(sessionId, conn.participantId)) {
-    clearTyping(sessionId, conn.participantId);
-    const stopPayload: WsPayload = {
-      type: WsEvent.Typing,
-      sessionId,
-      participantId: conn.participantId,
-      isTyping: false,
-    };
-    broadcastToSession(sessionId, stopPayload, conn.id);
-  }
-
-  const participants = getParticipants(sessionId);
-  const participant = participants.find((p) => p.id === conn.participantId);
-  if (participant) {
-    stashDisconnected(sessionId, participant);
-  }
-
-  log.info(
-    { sessionId, participantId: conn.participantId },
-    "participant left",
-  );
-  leaveSession(sessionId, conn.participantId);
-  unmapConnectionFromSession(conn.id);
-  broadcastPresence(sessionId);
-}
-
-export function handleMessage(
-  conn: Connection,
-  data: WsPayload,
-  log: FastifyBaseLogger,
-): void {
-  if (data.type !== WsEvent.Message) return;
-
-  const sessionId = getSessionForConnection(conn.id);
-  if (!sessionId || !conn.participantId) return;
-
-  const incoming = data.message;
-  if (!validateMessageContent(incoming?.content)) {
-    log.warn({ sessionId }, "invalid message content");
-    sendError(
-      conn,
-      "INVALID_MESSAGE",
-      "Message content must be a non-empty string",
+    connectionService.mapToSession(
+      conn.id,
+      data.sessionId,
+      data.participant.id,
     );
-    return;
+    log.info(
+      { sessionId: data.sessionId, participantId: data.participant.id },
+      "participant joined",
+    );
+    broadcastService.presence(data.sessionId);
   }
 
-  const participants = getParticipants(sessionId);
-  const sender = participants.find((p) => p.id === conn.participantId);
-  if (!sender) return;
+  handleLeave(conn: Connection, log: FastifyBaseLogger): void {
+    const {
+      connectionService,
+      sessionService,
+      typingService,
+      broadcastService,
+      reconnectionService,
+    } = this.server;
 
-  if (isTyping(sessionId, conn.participantId)) {
-    clearTyping(sessionId, conn.participantId);
-    const stopPayload: WsPayload = {
-      type: WsEvent.Typing,
-      sessionId,
-      participantId: conn.participantId,
-      isTyping: false,
-    };
-    broadcastToSession(sessionId, stopPayload, conn.id);
-  }
+    const sessionId = connectionService.getSessionForConnection(conn.id);
+    if (!sessionId || !conn.participantId) return;
 
-  const message = createMessage(
-    sessionId,
-    sender.id,
-    sender.name,
-    incoming.content,
-  );
-
-  log.info(
-    { sessionId, messageId: message.id, senderId: sender.id },
-    "message broadcast",
-  );
-
-  bufferMessage(sessionId, message);
-  addMessageToHistory(sessionId, message);
-
-  const broadcastPayload: WsPayload = {
-    type: WsEvent.Message,
-    message,
-  };
-  broadcastToSession(sessionId, broadcastPayload, conn.id);
-
-  const ackPayload: WsPayload = {
-    type: WsEvent.MessageAck,
-    messageId: message.id,
-    sessionId,
-    createdAt: message.createdAt,
-  };
-  conn.socket.send(JSON.stringify(ackPayload));
-
-  triggerAiResponse(sessionId).catch((err) => {
-    log.error({ err, sessionId }, "ai response failed");
-  });
-}
-
-export function handleTyping(
-  conn: Connection,
-  data: WsPayload,
-  log: FastifyBaseLogger,
-): void {
-  if (data.type !== WsEvent.Typing) return;
-
-  const sessionId = getSessionForConnection(conn.id);
-  if (!sessionId || !conn.participantId) return;
-
-  const participantId = conn.participantId;
-
-  if (data.isTyping) {
-    setTyping(sessionId, participantId, () => {
-      log.debug({ sessionId, participantId }, "typing timeout");
+    if (typingService.isTyping(sessionId, conn.participantId)) {
+      typingService.clear(sessionId, conn.participantId);
       const stopPayload: WsPayload = {
         type: WsEvent.Typing,
         sessionId,
-        participantId,
+        participantId: conn.participantId,
         isTyping: false,
       };
-      broadcastToSession(sessionId, stopPayload);
-    });
-  } else {
-    clearTyping(sessionId, participantId);
-  }
+      broadcastService.toSession(sessionId, stopPayload, conn.id);
+    }
 
-  log.debug(
-    { sessionId, participantId, isTyping: data.isTyping },
-    "typing event",
-  );
+    const participants = sessionService.getParticipants(sessionId);
+    const participant = participants.find((p) => p.id === conn.participantId);
+    if (participant) {
+      reconnectionService.stash(sessionId, participant);
+    }
 
-  const payload: WsPayload = {
-    type: WsEvent.Typing,
-    sessionId,
-    participantId,
-    isTyping: data.isTyping,
-  };
-  broadcastToSession(sessionId, payload, conn.id);
-}
-
-export function handleReconnect(
-  conn: Connection,
-  data: WsPayload,
-  log: FastifyBaseLogger,
-): void {
-  if (data.type !== WsEvent.Reconnect) return;
-
-  const result = tryReconnect(data.sessionId, data.participantId);
-  if (!result) {
-    log.warn(
-      { sessionId: data.sessionId, participantId: data.participantId },
-      "reconnect failed: no stashed session or grace period expired",
+    log.info(
+      { sessionId, participantId: conn.participantId },
+      "participant left",
     );
-    sendError(
-      conn,
-      "RECONNECT_FAILED",
-      "No active reconnection window for this participant",
+    sessionService.leave(sessionId, conn.participantId);
+    connectionService.unmapFromSession(conn.id);
+    broadcastService.presence(sessionId);
+  }
+
+  handleMessage(
+    conn: Connection,
+    data: WsPayload,
+    log: FastifyBaseLogger,
+  ): void {
+    if (data.type !== WsEvent.Message) return;
+
+    const {
+      connectionService,
+      sessionService,
+      typingService,
+      broadcastService,
+      messageService,
+      reconnectionService,
+      aiService,
+    } = this.server;
+
+    const sessionId = connectionService.getSessionForConnection(conn.id);
+    if (!sessionId || !conn.participantId) return;
+
+    const incoming = data.message;
+    if (!messageService.validateContent(incoming?.content)) {
+      log.warn({ sessionId }, "invalid message content");
+      this.sendError(
+        conn,
+        "INVALID_MESSAGE",
+        "Message content must be a non-empty string",
+      );
+      return;
+    }
+
+    const participants = sessionService.getParticipants(sessionId);
+    const sender = participants.find((p) => p.id === conn.participantId);
+    if (!sender) return;
+
+    if (typingService.isTyping(sessionId, conn.participantId)) {
+      typingService.clear(sessionId, conn.participantId);
+      const stopPayload: WsPayload = {
+        type: WsEvent.Typing,
+        sessionId,
+        participantId: conn.participantId,
+        isTyping: false,
+      };
+      broadcastService.toSession(sessionId, stopPayload, conn.id);
+    }
+
+    const message = messageService.create(
+      sessionId,
+      sender.id,
+      sender.name,
+      incoming.content,
+      incoming.replyTo,
     );
-    return;
-  }
 
-  const session = joinSession(data.sessionId, result.participant);
-  if (!session) {
-    sendError(conn, "SESSION_NOT_FOUND", `Session ${data.sessionId} not found`);
-    return;
-  }
+    log.info(
+      { sessionId, messageId: message.id, senderId: sender.id },
+      "message broadcast",
+    );
 
-  mapConnectionToSession(conn.id, data.sessionId, result.participant.id);
-  log.info(
-    {
-      sessionId: data.sessionId,
-      participantId: result.participant.id,
-      missedMessages: result.missedMessages.length,
-    },
-    "participant reconnected",
-  );
+    reconnectionService.bufferMessage(sessionId, message);
+    aiService.addMessageToHistory(sessionId, message);
 
-  for (const msg of result.missedMessages) {
-    const payload: WsPayload = {
+    const broadcastPayload: WsPayload = {
       type: WsEvent.Message,
-      message: msg,
+      message,
+    };
+    broadcastService.toSession(sessionId, broadcastPayload, conn.id);
+
+    const ackPayload: WsPayload = {
+      type: WsEvent.MessageAck,
+      messageId: message.id,
+      sessionId,
+      createdAt: message.createdAt,
+    };
+    conn.socket.send(JSON.stringify(ackPayload));
+
+    aiService.triggerAiResponse(sessionId).catch((err) => {
+      log.error({ err, sessionId }, "ai response failed");
+    });
+  }
+
+  handleTyping(
+    conn: Connection,
+    data: WsPayload,
+    log: FastifyBaseLogger,
+  ): void {
+    if (data.type !== WsEvent.Typing) return;
+
+    const { connectionService, typingService, broadcastService } = this.server;
+
+    const sessionId = connectionService.getSessionForConnection(conn.id);
+    if (!sessionId || !conn.participantId) return;
+
+    const participantId = conn.participantId;
+
+    if (data.isTyping) {
+      typingService.set(sessionId, participantId, () => {
+        log.debug({ sessionId, participantId }, "typing timeout");
+        const stopPayload: WsPayload = {
+          type: WsEvent.Typing,
+          sessionId,
+          participantId,
+          isTyping: false,
+        };
+        broadcastService.toSession(sessionId, stopPayload);
+      });
+    } else {
+      typingService.clear(sessionId, participantId);
+    }
+
+    log.debug(
+      { sessionId, participantId, isTyping: data.isTyping },
+      "typing event",
+    );
+
+    const payload: WsPayload = {
+      type: WsEvent.Typing,
+      sessionId,
+      participantId,
+      isTyping: data.isTyping,
+    };
+    broadcastService.toSession(sessionId, payload, conn.id);
+  }
+
+  handleReconnect(
+    conn: Connection,
+    data: WsPayload,
+    log: FastifyBaseLogger,
+  ): void {
+    if (data.type !== WsEvent.Reconnect) return;
+
+    const {
+      reconnectionService,
+      sessionService,
+      connectionService,
+      broadcastService,
+    } = this.server;
+
+    const result = reconnectionService.tryReconnect(
+      data.sessionId,
+      data.participantId,
+    );
+    if (!result) {
+      log.warn(
+        { sessionId: data.sessionId, participantId: data.participantId },
+        "reconnect failed: no stashed session or grace period expired",
+      );
+      this.sendError(
+        conn,
+        "RECONNECT_FAILED",
+        "No active reconnection window for this participant",
+      );
+      return;
+    }
+
+    const session = sessionService.join(data.sessionId, result.participant);
+    if (!session) {
+      this.sendError(
+        conn,
+        "SESSION_NOT_FOUND",
+        `Session ${data.sessionId} not found`,
+      );
+      return;
+    }
+
+    connectionService.mapToSession(
+      conn.id,
+      data.sessionId,
+      result.participant.id,
+    );
+    log.info(
+      {
+        sessionId: data.sessionId,
+        participantId: result.participant.id,
+        missedMessages: result.missedMessages.length,
+      },
+      "participant reconnected",
+    );
+
+    for (const msg of result.missedMessages) {
+      const payload: WsPayload = {
+        type: WsEvent.Message,
+        message: msg,
+      };
+      conn.socket.send(JSON.stringify(payload));
+    }
+
+    broadcastService.presence(data.sessionId);
+  }
+
+  private sendError(conn: Connection, code: string, message: string): void {
+    const payload: WsPayload = {
+      type: WsEvent.Error,
+      code,
+      message,
     };
     conn.socket.send(JSON.stringify(payload));
   }
-
-  broadcastPresence(data.sessionId);
 }

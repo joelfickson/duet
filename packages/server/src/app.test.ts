@@ -9,20 +9,6 @@ import { WsEvent } from "@duet/shared";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { WebSocket } from "ws";
 import { buildApp } from "./app";
-import { clearAllConnections } from "./services/connections";
-import {
-  clearAllHeartbeats,
-  getHeartbeatConfig,
-  setHeartbeatConfig,
-} from "./services/heartbeat";
-import { clearAllRateLimits } from "./services/rate-limit";
-import { clearAllDisconnected, setGracePeriod } from "./services/reconnection";
-import {
-  createSession,
-  destroySession,
-  getAllSessions,
-} from "./services/sessions";
-import { clearAllTyping } from "./services/typing";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 type TestSocket = WebSocket & { terminate(): void };
@@ -103,20 +89,20 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  for (const s of getAllSessions()) {
-    destroySession(s.id);
+  for (const s of app.sessionService.getAll()) {
+    app.sessionService.destroy(s.id);
   }
-  clearAllConnections();
-  clearAllTyping();
-  clearAllHeartbeats();
-  clearAllDisconnected();
-  clearAllRateLimits();
+  app.connectionService.clearAll();
+  app.typingService.clearAll();
+  app.heartbeatService.clearAll();
+  app.reconnectionService.clearAll();
+  app.rateLimitService.clearAll();
   await app.close();
 });
 
 describe("e2e: participant tracking", () => {
   it("joining a session broadcasts presence to the joiner", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
 
     const ws = await injectWS();
 
@@ -133,7 +119,7 @@ describe("e2e: participant tracking", () => {
   });
 
   it("second participant join broadcasts presence to first participant", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
 
     const ws1 = await injectWS();
     const ws2 = await injectWS();
@@ -157,7 +143,7 @@ describe("e2e: participant tracking", () => {
   });
 
   it("disconnecting broadcasts updated presence to remaining members", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
 
     const ws1 = await injectWS();
     const ws2 = await injectWS();
@@ -182,7 +168,7 @@ describe("e2e: participant tracking", () => {
   });
 
   it("explicit leave event removes participant and broadcasts", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
 
     const ws1 = await injectWS();
     const ws2 = await injectWS();
@@ -221,7 +207,7 @@ describe("e2e: participant tracking", () => {
   });
 
   it("supports many participants in the same session", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const sockets: TestSocket[] = [];
     const count = 10;
 
@@ -253,7 +239,7 @@ describe("e2e: participant tracking", () => {
     const ws = await injectWS();
     ws.send("not json at all");
 
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const msgPromise = waitForMessage(ws);
     ws.send(joinPayload(session.id, "p1", "Alice"));
 
@@ -266,7 +252,7 @@ describe("e2e: participant tracking", () => {
 
 describe("e2e: message broadcast", () => {
   async function setupTwoParticipants() {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws1 = await injectWS();
     const ws2 = await injectWS();
 
@@ -322,7 +308,7 @@ describe("e2e: message broadcast", () => {
   });
 
   it("message from unjoined connection is dropped", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws = await injectWS();
 
     ws.send(messagePayload(session.id, "p1", "Alice", "Hello"));
@@ -411,7 +397,7 @@ describe("e2e: message broadcast", () => {
 
 describe("e2e: presence system", () => {
   it("join broadcasts presence with full participant list", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws1 = await injectWS();
 
     const msg = waitForMessage(ws1);
@@ -427,7 +413,7 @@ describe("e2e: presence system", () => {
   });
 
   it("second join broadcasts updated list to all participants", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws1 = await injectWS();
     const ws2 = await injectWS();
 
@@ -449,7 +435,7 @@ describe("e2e: presence system", () => {
   });
 
   it("leave broadcasts updated list to remaining participants", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws1 = await injectWS();
     const ws2 = await injectWS();
 
@@ -474,7 +460,7 @@ describe("e2e: presence system", () => {
   });
 
   it("disconnect broadcasts updated list to remaining participants", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws1 = await injectWS();
     const ws2 = await injectWS();
 
@@ -498,7 +484,7 @@ describe("e2e: presence system", () => {
   });
 
   it("presence events use shared types", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws = await injectWS();
 
     const msg = waitForMessage(ws);
@@ -518,7 +504,7 @@ describe("e2e: presence system", () => {
 
 describe("e2e: typing indicators", () => {
   async function setupTwoJoined() {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws1 = await injectWS();
     const ws2 = await injectWS();
 
@@ -586,7 +572,7 @@ describe("e2e: typing indicators", () => {
   }, 5000);
 
   it("typing from unjoined connection is ignored", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws = await injectWS();
 
     ws.send(typingPayload(session.id, "p1", true));
@@ -658,8 +644,8 @@ describe("e2e: typing indicators", () => {
 
 describe("e2e: heartbeat", () => {
   it("heartbeat config is configurable", () => {
-    setHeartbeatConfig(100, 2);
-    const config = getHeartbeatConfig();
+    app.heartbeatService.setConfig(100, 2);
+    const config = app.heartbeatService.getConfig();
     expect(config.intervalMs).toBe(100);
     expect(config.maxMissed).toBe(2);
   });
@@ -667,7 +653,7 @@ describe("e2e: heartbeat", () => {
 
 describe("e2e: reconnection", () => {
   async function setupTwoJoined() {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws1 = await injectWS();
     const ws2 = await injectWS();
 
@@ -683,7 +669,7 @@ describe("e2e: reconnection", () => {
   }
 
   it("reconnect within grace period restores participant identity", async () => {
-    setGracePeriod(5000);
+    app.reconnectionService.setGracePeriod(5000);
     const { session, ws1, ws2 } = await setupTwoJoined();
 
     ws2.terminate();
@@ -703,7 +689,7 @@ describe("e2e: reconnection", () => {
   });
 
   it("reconnect after grace period expires returns error", async () => {
-    setGracePeriod(50);
+    app.reconnectionService.setGracePeriod(50);
     const { session, ws1, ws2 } = await setupTwoJoined();
 
     ws2.terminate();
@@ -724,7 +710,7 @@ describe("e2e: reconnection", () => {
   });
 
   it("reconnecting participant receives missed messages", async () => {
-    setGracePeriod(5000);
+    app.reconnectionService.setGracePeriod(5000);
     const { session, ws1, ws2 } = await setupTwoJoined();
 
     ws2.terminate();
@@ -768,7 +754,7 @@ describe("e2e: reconnection", () => {
   });
 
   it("reconnect to nonexistent participant returns error", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
     const ws = await injectWS();
 
     const errorPromise = waitForMessage(ws);

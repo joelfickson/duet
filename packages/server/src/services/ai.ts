@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { Message, WsPayload } from "@duet/shared";
 import { WsEvent } from "@duet/shared";
-import { broadcastToSession } from "./broadcast";
-import { buildContext } from "./context";
+import type BroadcastService from "./broadcast";
+import type ContextService from "./context";
 import { getProvider, LlmError, type ProviderId } from "./providers";
-import { getParticipants } from "./sessions";
-import { buildSystemPrompt } from "./system-prompt";
+import type RetryService from "./retry";
+import type SessionService from "./sessions";
+import type SystemPromptService from "./system-prompt";
 
 interface SessionConfig {
   apiKey: string;
@@ -13,149 +14,170 @@ interface SessionConfig {
   model?: string;
 }
 
-const sessionConfigs = new Map<string, SessionConfig>();
-const sessionMessages = new Map<string, Message[]>();
-const activeStreams = new Map<string, boolean>();
-
 const serverAnthropicKey = process.env.ANTHROPIC_API_KEY ?? "";
 const serverGeminiKey = process.env.GEMINI_API_KEY ?? "";
 const serverOpenrouterKey = process.env.OPENROUTER_API_KEY ?? "";
 
-function getDefaultProvider(): ProviderId {
-  if (serverAnthropicKey) return "anthropic";
-  if (serverGeminiKey) return "gemini";
-  if (serverOpenrouterKey) return "openrouter";
-  return "anthropic";
-}
+export default class AiService {
+  private configs = new Map<string, SessionConfig>();
+  private messages = new Map<string, Message[]>();
+  private activeStreams = new Map<string, boolean>();
 
-function getDefaultApiKey(provider: ProviderId): string {
-  if (provider === "gemini") return serverGeminiKey;
-  if (provider === "openrouter") return serverOpenrouterKey;
-  return serverAnthropicKey;
-}
+  constructor(
+    private broadcast: BroadcastService,
+    private context: ContextService,
+    private sessions: SessionService,
+    private systemPrompt: SystemPromptService,
+    private retry: RetryService,
+  ) {}
 
-export function setSessionConfig(
-  sessionId: string,
-  apiKey: string,
-  provider: ProviderId = "anthropic",
-  model?: string,
-): void {
-  sessionConfigs.set(sessionId, { apiKey, provider, model });
-}
-
-export function getSessionApiKey(sessionId: string): string | null {
-  const config = sessionConfigs.get(sessionId);
-  if (config) return config.apiKey;
-  const defaultKey = getDefaultApiKey(getDefaultProvider());
-  return defaultKey || null;
-}
-
-export function getSessionProvider(sessionId: string): ProviderId {
-  return sessionConfigs.get(sessionId)?.provider ?? getDefaultProvider();
-}
-
-export function clearSessionState(sessionId: string): void {
-  sessionConfigs.delete(sessionId);
-  sessionMessages.delete(sessionId);
-  activeStreams.delete(sessionId);
-}
-
-export function addMessageToHistory(sessionId: string, message: Message): void {
-  let messages = sessionMessages.get(sessionId);
-  if (!messages) {
-    messages = [];
-    sessionMessages.set(sessionId, messages);
-  }
-  messages.push(message);
-}
-
-export function getMessageHistory(sessionId: string): Message[] {
-  return sessionMessages.get(sessionId) ?? [];
-}
-
-export async function triggerAiResponse(sessionId: string): Promise<void> {
-  if (activeStreams.get(sessionId)) return;
-
-  const apiKey = getSessionApiKey(sessionId);
-  if (!apiKey) {
-    broadcastToSession(sessionId, {
-      type: WsEvent.AiError,
-      sessionId,
-      code: "NO_API_KEY",
-      message:
-        "No API key configured. Set ANTHROPIC_API_KEY / GEMINI_API_KEY or provide one when creating the session.",
-    } as WsPayload);
-    return;
+  setSessionConfig(
+    sessionId: string,
+    apiKey: string,
+    provider: ProviderId = "anthropic",
+    model?: string,
+  ): void {
+    this.configs.set(sessionId, { apiKey, provider, model });
   }
 
-  const messages = getMessageHistory(sessionId);
-  if (messages.length === 0) return;
+  getSessionApiKey(sessionId: string): string | null {
+    const config = this.configs.get(sessionId);
+    if (config) return config.apiKey;
+    const defaultKey = this.getDefaultApiKey(this.getDefaultProvider());
+    return defaultKey || null;
+  }
 
-  const participants = getParticipants(sessionId);
-  const systemPrompt = buildSystemPrompt(participants);
-  const context = buildContext(messages);
-  const config = sessionConfigs.get(sessionId);
-  const providerId = config?.provider ?? getDefaultProvider();
-  const provider = getProvider(providerId);
-  const model = config?.model;
+  getSessionProvider(sessionId: string): ProviderId {
+    return this.configs.get(sessionId)?.provider ?? this.getDefaultProvider();
+  }
 
-  activeStreams.set(sessionId, true);
-  let fullContent = "";
-  let seq = 0;
+  clearSessionState(sessionId: string): void {
+    this.configs.delete(sessionId);
+    this.messages.delete(sessionId);
+    this.activeStreams.delete(sessionId);
+  }
 
-  try {
-    const stream = provider.stream({
-      messages: context,
-      apiKey,
-      systemPrompt,
-      model,
-    });
+  addMessageToHistory(sessionId: string, message: Message): void {
+    let messages = this.messages.get(sessionId);
+    if (!messages) {
+      messages = [];
+      this.messages.set(sessionId, messages);
+    }
+    messages.push(message);
+  }
 
-    for await (const token of stream) {
-      fullContent += token;
-      seq++;
+  getMessageHistory(sessionId: string): Message[] {
+    return this.messages.get(sessionId) ?? [];
+  }
 
-      const chunkPayload: WsPayload = {
-        type: WsEvent.AiChunk,
+  async triggerAiResponse(sessionId: string): Promise<void> {
+    if (this.activeStreams.get(sessionId)) return;
+
+    const apiKey = this.getSessionApiKey(sessionId);
+    if (!apiKey) {
+      this.broadcast.toSession(sessionId, {
+        type: WsEvent.AiError,
         sessionId,
-        token,
-        seq,
-      };
-      broadcastToSession(sessionId, chunkPayload);
+        code: "NO_API_KEY",
+        message:
+          "No API key configured. Set ANTHROPIC_API_KEY / GEMINI_API_KEY or provide one when creating the session.",
+      } as WsPayload);
+      return;
     }
 
-    const aiMessage: Message = {
-      id: randomUUID(),
-      sessionId,
-      senderId: "ai",
-      senderName: "AI",
-      content: fullContent,
-      role: "assistant",
-      createdAt: new Date().toISOString(),
-    };
+    const messages = this.getMessageHistory(sessionId);
+    if (messages.length === 0) return;
 
-    addMessageToHistory(sessionId, aiMessage);
+    const participants = this.sessions.getParticipants(sessionId);
+    const systemPrompt = this.systemPrompt.build(participants);
+    const context = this.context.buildContext(messages);
+    const config = this.configs.get(sessionId);
+    const providerId = config?.provider ?? this.getDefaultProvider();
+    const provider = getProvider(providerId);
+    const model = config?.model;
 
-    const donePayload: WsPayload = {
-      type: WsEvent.AiDone,
-      sessionId,
-      message: aiMessage,
-    };
-    broadcastToSession(sessionId, donePayload);
-  } catch (error) {
-    const llmError =
-      error instanceof LlmError
-        ? error
-        : new LlmError("UNKNOWN", String(error));
+    const messageCountAtStart = messages.length;
+    this.activeStreams.set(sessionId, true);
+    let fullContent = "";
+    let seq = 0;
 
-    const errorPayload: WsPayload = {
-      type: WsEvent.AiError,
-      sessionId,
-      code: llmError.code,
-      message: llmError.message,
-    };
-    broadcastToSession(sessionId, errorPayload);
-  } finally {
-    activeStreams.delete(sessionId);
+    try {
+      const stream = this.retry.withRetry(() =>
+        provider.stream({
+          messages: context,
+          apiKey,
+          systemPrompt,
+          model,
+        }),
+      );
+
+      for await (const token of stream) {
+        fullContent += token;
+        seq++;
+
+        const chunkPayload: WsPayload = {
+          type: WsEvent.AiChunk,
+          sessionId,
+          token,
+          seq,
+        };
+        this.broadcast.toSession(sessionId, chunkPayload);
+      }
+
+      const aiMessage: Message = {
+        id: randomUUID(),
+        sessionId,
+        senderId: "ai",
+        senderName: "AI",
+        content: fullContent,
+        role: "assistant",
+        createdAt: new Date().toISOString(),
+      };
+
+      this.addMessageToHistory(sessionId, aiMessage);
+
+      const donePayload: WsPayload = {
+        type: WsEvent.AiDone,
+        sessionId,
+        message: aiMessage,
+      };
+      this.broadcast.toSession(sessionId, donePayload);
+    } catch (error) {
+      const llmError =
+        error instanceof LlmError
+          ? error
+          : new LlmError("UNKNOWN", String(error));
+
+      const errorPayload: WsPayload = {
+        type: WsEvent.AiError,
+        sessionId,
+        code: llmError.code,
+        message: llmError.message,
+      };
+      this.broadcast.toSession(sessionId, errorPayload);
+    } finally {
+      this.activeStreams.delete(sessionId);
+    }
+
+    const currentMessages = this.getMessageHistory(sessionId);
+    const newUserMessages = currentMessages
+      .slice(messageCountAtStart)
+      .some((m) => m.role === "user");
+    if (newUserMessages) {
+      await this.triggerAiResponse(sessionId);
+    }
+  }
+
+  private getDefaultProvider(): ProviderId {
+    if (serverAnthropicKey) return "anthropic";
+    if (serverGeminiKey) return "gemini";
+    if (serverOpenrouterKey) return "openrouter";
+    return "anthropic";
+  }
+
+  private getDefaultApiKey(provider: ProviderId): string {
+    if (provider === "gemini") return serverGeminiKey;
+    if (provider === "openrouter") return serverOpenrouterKey;
+    return serverAnthropicKey;
   }
 }
