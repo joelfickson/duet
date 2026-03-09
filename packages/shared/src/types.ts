@@ -17,6 +17,12 @@ export interface SessionState {
 
 export type MessageRole = "user" | "assistant";
 
+export interface ReplyTo {
+  messageId: string;
+  content: string;
+  senderName: string;
+}
+
 export interface Message {
   id: string;
   sessionId: string;
@@ -25,6 +31,7 @@ export interface Message {
   content: string;
   role: MessageRole;
   createdAt: string;
+  replyTo?: ReplyTo;
 }
 
 export enum WsEvent {
