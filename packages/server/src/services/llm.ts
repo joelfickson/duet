@@ -1,89 +1,14 @@
-import Anthropic from "@anthropic-ai/sdk";
-import type { MessageParam } from "@anthropic-ai/sdk/resources/messages.js";
+export type {
+  LlmMessage as MessageParam,
+  StreamParams as StreamCompletionParams,
+} from "./providers";
+export { LlmError } from "./providers";
 
-const DEFAULT_MODEL = "claude-sonnet-4-20250514";
-const DEFAULT_TIMEOUT = 30_000;
-
-export type LlmErrorCode =
-  | "INVALID_API_KEY"
-  | "RATE_LIMITED"
-  | "OVERLOADED"
-  | "TIMEOUT"
-  | "UNKNOWN";
-
-export class LlmError extends Error {
-  readonly code: LlmErrorCode;
-
-  constructor(code: LlmErrorCode, message: string) {
-    super(message);
-    this.name = "LlmError";
-    this.code = code;
-  }
-}
-
-export interface StreamCompletionParams {
-  messages: MessageParam[];
-  apiKey: string;
-  model?: string;
-  systemPrompt?: string;
-  timeout?: number;
-}
-
-function mapSdkError(error: unknown): LlmError {
-  if (error instanceof Anthropic.APIError) {
-    if (error.status === 401) {
-      return new LlmError("INVALID_API_KEY", "Invalid API key");
-    }
-    if (error.status === 429) {
-      return new LlmError("RATE_LIMITED", "Rate limited by Anthropic API");
-    }
-    if (error.status === 529) {
-      return new LlmError("OVERLOADED", "Anthropic API is overloaded");
-    }
-    return new LlmError("UNKNOWN", error.message);
-  }
-
-  if (error instanceof Anthropic.APIConnectionTimeoutError) {
-    return new LlmError("TIMEOUT", "Request timed out");
-  }
-
-  if (error instanceof Error) {
-    return new LlmError("UNKNOWN", error.message);
-  }
-
-  return new LlmError("UNKNOWN", String(error));
-}
+import type { StreamParams } from "./providers";
+import { getProvider } from "./providers";
 
 export async function* streamCompletion(
-  params: StreamCompletionParams,
+  params: StreamParams,
 ): AsyncGenerator<string> {
-  const {
-    messages,
-    apiKey,
-    model = DEFAULT_MODEL,
-    systemPrompt,
-    timeout = DEFAULT_TIMEOUT,
-  } = params;
-
-  const client = new Anthropic({ apiKey, timeout });
-
-  try {
-    const stream = client.messages.stream({
-      model,
-      max_tokens: 4096,
-      messages,
-      ...(systemPrompt ? { system: systemPrompt } : {}),
-    });
-
-    for await (const event of stream) {
-      if (
-        event.type === "content_block_delta" &&
-        event.delta.type === "text_delta"
-      ) {
-        yield event.delta.text;
-      }
-    }
-  } catch (error) {
-    throw mapSdkError(error);
-  }
+  yield* getProvider("anthropic").stream(params);
 }

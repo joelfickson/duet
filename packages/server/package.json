@@ -10,11 +10,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@duet/shared": "workspace:*",
     "@fastify/cors": "^11.2.0",
     "@fastify/websocket": "^11.2.0",
+    "@google/genai": "^1.44.0",
     "better-sqlite3": "^12.6.2",
-    "fastify": "^5.8.2"
+    "fastify": "^5.8.2",
+    "openai": "^6.27.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

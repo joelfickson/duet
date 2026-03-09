@@ -19,7 +19,10 @@ vi.mock("@anthropic-ai/sdk", () => {
     }
   }
 
-  const MockAnthropic = vi.fn();
+  const MockAnthropic = vi.fn() as ReturnType<typeof vi.fn> & {
+    APIError: typeof MockAPIError;
+    APIConnectionTimeoutError: typeof MockAPIConnectionTimeoutError;
+  };
   MockAnthropic.APIError = MockAPIError;
   MockAnthropic.APIConnectionTimeoutError = MockAPIConnectionTimeoutError;
   return { default: MockAnthropic };

@@ -14,17 +14,32 @@ export function useSessionExists(sessionId: string) {
   });
 }
 
+type Provider = "anthropic" | "gemini" | "openrouter";
+
 interface CreateSessionParams {
   title?: string;
   displayName: string;
+  apiKey?: string;
+  provider?: Provider;
+  model?: string;
 }
 
 export function useCreateSession() {
   const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: async ({ title }: CreateSessionParams) => {
-      const { data } = await apiClient.post("/api/sessions", { title });
+    mutationFn: async ({
+      title,
+      apiKey,
+      provider,
+      model,
+    }: CreateSessionParams) => {
+      const { data } = await apiClient.post("/api/sessions", {
+        title,
+        apiKey,
+        provider,
+        model,
+      });
       return sessionSchema.parse(data);
     },
     onSuccess: (session, { displayName }) => {
