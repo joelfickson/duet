@@ -159,6 +159,9 @@ importers:
       fastify:
         specifier: ^5.8.2
         version: 5.8.2
+      fastify-plugin:
+        specifier: ^5.1.0
+        version: 5.1.0
       openai:
         specifier: ^6.27.0
         version: 6.27.0(ws@8.19.0)(zod@4.3.6)

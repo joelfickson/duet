@@ -17,6 +17,7 @@
     "@google/genai": "^1.44.0",
     "better-sqlite3": "^12.6.2",
     "fastify": "^5.8.2",
+    "fastify-plugin": "^5.1.0",
     "openai": "^6.27.0"
   },
   "devDependencies": {

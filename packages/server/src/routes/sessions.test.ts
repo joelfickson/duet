@@ -1,14 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../app";
-import { clearAllConnections } from "../services/connections";
-import { clearAllHeartbeats } from "../services/heartbeat";
-import { clearAllDisconnected } from "../services/reconnection";
-import {
-  createSession,
-  destroySession,
-  getAllSessions,
-} from "../services/sessions";
-import { clearAllTyping } from "../services/typing";
 
 type App = Awaited<ReturnType<typeof buildApp>>;
 let app: App;
@@ -19,13 +10,13 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  for (const s of getAllSessions()) {
-    destroySession(s.id);
+  for (const s of app.sessionService.getAll()) {
+    app.sessionService.destroy(s.id);
   }
-  clearAllConnections();
-  clearAllTyping();
-  clearAllHeartbeats();
-  clearAllDisconnected();
+  app.connectionService.clearAll();
+  app.typingService.clearAll();
+  app.heartbeatService.clearAll();
+  app.reconnectionService.clearAll();
   await app.close();
 });
 
@@ -77,7 +68,7 @@ describe("POST /api/sessions", () => {
 
 describe("GET /api/sessions/:id/exists", () => {
   it("returns exists: true for an active session", async () => {
-    const session = createSession("test");
+    const session = app.sessionService.create("test");
 
     const response = await app.inject({
       method: "GET",
@@ -99,8 +90,8 @@ describe("GET /api/sessions/:id/exists", () => {
   });
 
   it("returns exists: false after a session is destroyed", async () => {
-    const session = createSession("test");
-    destroySession(session.id);
+    const session = app.sessionService.create("test");
+    app.sessionService.destroy(session.id);
 
     const response = await app.inject({
       method: "GET",

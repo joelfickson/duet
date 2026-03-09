@@ -1,7 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { setSessionConfig } from "../services/ai";
 import type { ProviderId } from "../services/providers";
-import { createSession, getSession } from "../services/sessions";
 
 export async function sessionsRoute(server: FastifyInstance): Promise<void> {
   server.post<{
@@ -13,9 +11,9 @@ export async function sessionsRoute(server: FastifyInstance): Promise<void> {
     };
   }>("/api/sessions", async (request, reply) => {
     const { title, apiKey, provider, model } = request.body ?? {};
-    const session = createSession(title);
+    const session = server.sessionService.create(title);
     if (apiKey || provider || model) {
-      setSessionConfig(
+      server.aiService.setSessionConfig(
         session.id,
         apiKey ?? "",
         provider ?? "anthropic",
@@ -28,7 +26,7 @@ export async function sessionsRoute(server: FastifyInstance): Promise<void> {
   server.get<{ Params: { id: string } }>(
     "/api/sessions/:id/exists",
     async (request) => {
-      const session = getSession(request.params.id);
+      const session = server.sessionService.get(request.params.id);
       return { exists: session !== null };
     },
   );

@@ -1,29 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { createSession, generateSessionId } from "./sessions";
+import SessionService from "./sessions";
 
-describe("session ID generation", () => {
+describe("SessionService", () => {
   it("generates a 10-character ID", () => {
-    const id = generateSessionId();
+    const service = new SessionService();
+    const id = service.generateSessionId();
     expect(id).toHaveLength(10);
   });
 
   it("generates URL-safe alphanumeric IDs", () => {
+    const service = new SessionService();
     for (let i = 0; i < 100; i++) {
-      const id = generateSessionId();
+      const id = service.generateSessionId();
       expect(id).toMatch(/^[A-Za-z0-9]+$/);
     }
   });
 
   it("does not produce collisions in 1000 samples", () => {
+    const service = new SessionService();
     const ids = new Set<string>();
     for (let i = 0; i < 1000; i++) {
-      ids.add(generateSessionId());
+      ids.add(service.generateSessionId());
     }
     expect(ids.size).toBe(1000);
   });
 
-  it("createSession uses the new ID format", () => {
-    const session = createSession("test");
+  it("create uses the new ID format", () => {
+    const service = new SessionService();
+    const session = service.create("test");
     expect(session.id).toHaveLength(10);
     expect(session.id).toMatch(/^[A-Za-z0-9]+$/);
   });

@@ -3,6 +3,7 @@ import websocket from "@fastify/websocket";
 import Fastify, { type FastifyServerOptions } from "fastify";
 import { initDatabase } from "./db/database";
 import { runMigrations } from "./db/migrate";
+import servicesPlugin from "./plugins/services";
 import { healthRoute } from "./routes/health";
 import { sessionsRoute } from "./routes/sessions";
 import { wsRoute } from "./routes/ws";
@@ -27,6 +28,7 @@ export async function buildApp(opts: AppOptions = {}) {
 
   await server.register(cors, { origin: true });
   await server.register(websocket);
+  await server.register(servicesPlugin);
   await server.register(healthRoute);
   await server.register(sessionsRoute);
   await server.register(wsRoute);

@@ -10,10 +10,12 @@ Guidelines:
 - Be concise and helpful. Respond to the most recent message in context of the full conversation.
 - When participants disagree or have different questions, acknowledge both perspectives.`;
 
-export function buildSystemPrompt(participants: Participant[]): string {
-  const names = participants.map((p) => p.name).join(", ");
-  return TEMPLATE.replace("{{count}}", String(participants.length)).replace(
-    "{{names}}",
-    names,
-  );
+export default class SystemPromptService {
+  build(participants: Participant[]): string {
+    const names = participants.map((p) => p.name).join(", ");
+    return TEMPLATE.replace("{{count}}", String(participants.length)).replace(
+      "{{names}}",
+      names,
+    );
+  }
 }

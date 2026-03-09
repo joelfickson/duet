@@ -1,28 +1,21 @@
 import type { WsPayload } from "@duet/shared";
 import { WsEvent } from "@duet/shared";
 import type { FastifyInstance } from "fastify";
-import {
-  handleJoin,
-  handleLeave,
-  handleMessage,
-  handleReconnect,
-  handleTyping,
-} from "../controllers/ws.controller";
-import { addConnection, removeConnection } from "../services/connections";
-import { startHeartbeat, stopHeartbeat } from "../services/heartbeat";
-import { clearRateLimit, isRateLimited } from "../services/rate-limit";
+import WsController from "../controllers/ws.controller";
 
 export async function wsRoute(server: FastifyInstance): Promise<void> {
+  const controller = new WsController(server);
+
   server.get("/ws", { websocket: true }, (socket, _req) => {
-    const conn = addConnection(socket);
+    const conn = server.connectionService.add(socket);
     const log = server.log.child({ connectionId: conn.id });
 
     log.debug("ws connection opened");
 
-    startHeartbeat(conn.id, socket, () => {
+    server.heartbeatService.start(conn.id, socket, () => {
       log.warn("connection dead: missed pongs");
-      handleLeave(conn, log);
-      removeConnection(conn.id);
+      controller.handleLeave(conn, log);
+      server.connectionService.remove(conn.id);
       socket.terminate();
     });
 
@@ -37,7 +30,7 @@ export async function wsRoute(server: FastifyInstance): Promise<void> {
 
       if (
         (data.type === WsEvent.Message || data.type === WsEvent.Typing) &&
-        isRateLimited(conn.id)
+        server.rateLimitService.isLimited(conn.id)
       ) {
         log.warn({ connectionId: conn.id }, "rate limited");
         const errorPayload: WsPayload = {
@@ -51,37 +44,37 @@ export async function wsRoute(server: FastifyInstance): Promise<void> {
 
       switch (data.type) {
         case WsEvent.Join:
-          handleJoin(conn, data, log);
+          controller.handleJoin(conn, data, log);
           break;
         case WsEvent.Leave:
-          handleLeave(conn, log);
+          controller.handleLeave(conn, log);
           break;
         case WsEvent.Message:
-          handleMessage(conn, data, log);
+          controller.handleMessage(conn, data, log);
           break;
         case WsEvent.Typing:
-          handleTyping(conn, data, log);
+          controller.handleTyping(conn, data, log);
           break;
         case WsEvent.Reconnect:
-          handleReconnect(conn, data, log);
+          controller.handleReconnect(conn, data, log);
           break;
       }
     });
 
     socket.on("close", () => {
-      stopHeartbeat(conn.id);
-      clearRateLimit(conn.id);
-      handleLeave(conn, log);
-      removeConnection(conn.id);
+      server.heartbeatService.stop(conn.id);
+      server.rateLimitService.clear(conn.id);
+      controller.handleLeave(conn, log);
+      server.connectionService.remove(conn.id);
       log.debug("ws connection closed");
     });
 
     socket.on("error", (err) => {
       log.error({ err }, "ws connection error");
-      stopHeartbeat(conn.id);
-      clearRateLimit(conn.id);
-      handleLeave(conn, log);
-      removeConnection(conn.id);
+      server.heartbeatService.stop(conn.id);
+      server.rateLimitService.clear(conn.id);
+      controller.handleLeave(conn, log);
+      server.connectionService.remove(conn.id);
     });
   });
 }
