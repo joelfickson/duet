@@ -1,106 +1,144 @@
 # Duet
 
-Collaborative AI sessions where multiple people share a live context and get responses calibrated to how they think.
+Collaborative AI sessions - multiple participants, one shared context, real-time streaming.
 
-AI conversations today are single-player. One person, one thread, one context window. When teams try to use AI together, the workflow breaks down: screenshots in Slack, lost context, generic responses regardless of role. Duet fixes this by putting everyone in the same AI conversation with shared context and - eventually - personalized output per participant.
+AI conversations today are single-player. Duet puts everyone in the same AI conversation. Messages from all participants feed into a single context, and the AI streams its response to everyone simultaneously.
 
 ## How it works
 
 1. Create a session and share the invite link
-2. Both participants join over WebSocket
-3. Messages from all participants feed into a single AI context
-4. The AI streams its response to everyone in real time, aware of who is in the room
+2. Participants join over WebSocket
+3. All messages feed into a single AI context
+4. The AI streams its response to everyone in real time
 
-The AI sees everything both people contribute and addresses participants by name. Every message is clearly attributed to its sender.
+The AI sees everything every participant contributes and addresses people by name.
 
-## Architecture
-
-```
-User A                          User B
-  |                               |
-  +----------- WebSocket ---------+
-                    |
-              Session Server
-                    |
-         +----------+----------+
-    Context Store          LLM Pipeline
-    (shared, neutral)      (bring your own key)
-         +----------+----------+
-                    |
-          Fan-out via WebSocket
-```
-
-- **Monorepo** with pnpm workspaces: `@duet/server`, `@duet/client`, `@duet/shared`
-- **Server**: Node.js + Fastify, WebSocket via `ws`, Bull + Redis for job queuing
-- **Client**: React Router v7 (framework mode) + TypeScript, Zustand for session state
-- **Database**: SQLite for sessions and messages
-- **LLM**: Bring your own API key. Ships with Anthropic Claude support, designed to be provider-agnostic
-
-## Getting started
+## Quick start
 
 ### Prerequisites
 
-- Node.js 24+
-- pnpm
+- Node.js 20+
+- pnpm 9+
 
 ### Setup
 
 ```bash
-git clone https://github.com/joelfickson/duet.git
-cd duet
+git clone https://github.com/joelfickson/joinduet.git
+cd joinduet
 pnpm install
 ```
 
 ### Configuration
 
-Copy the example environment file and add your LLM API key:
+Set your LLM provider API key. At least one is required:
 
 ```bash
-cp .env.example .env
+# Anthropic (default)
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# Or Google Gemini
+export GEMINI_API_KEY=AIza...
+
+# Or OpenRouter (has free models)
+export OPENROUTER_API_KEY=sk-or-...
 ```
 
-```
-LLM_API_KEY=your-key-here
-```
+Or use BYOK - provide your API key when creating a session in the UI.
 
 ### Run
 
 ```bash
-# Start the server
-pnpm --filter @duet/server dev
+# Start both server and client
+pnpm dev
 
-# Start the client
-pnpm --filter @duet/client dev
+# Or separately
+pnpm --filter @duet/server dev   # Server on :8000
+pnpm --filter @duet/client dev   # Client on :8001
 ```
 
-## Project structure
+Open http://localhost:8001, create a session, share the invite link.
+
+## Architecture
+
+```
+Participant A                 Participant B
+      |                             |
+      +---------- WebSocket --------+
+                      |
+                Session Server
+                      |
+           +----------+----------+
+      Context Store          LLM Pipeline
+      (shared, neutral)      (multi-provider)
+           +----------+----------+
+                      |
+            Fan-out via WebSocket
+```
+
+### Monorepo structure
 
 ```
 packages/
-  server/    - WebSocket server, session management, LLM pipeline
-  client/    - React Router v7 frontend
-  shared/    - Shared TypeScript types
+  server/    @duet/server   Fastify + WebSocket, LLM streaming, SQLite
+  client/    @duet/client   React Router v7, Zustand, native WebSocket
+  shared/    @duet/shared   TypeScript types (events, messages, sessions)
 ```
 
-## Roadmap
+### LLM providers
 
-The MVP delivers the core experience: two people, one AI, one shared conversation with real-time streaming.
+Ships with three providers, selectable per session:
 
-**MVP (current focus)**
-- Auth via Clerk (email + Google OAuth)
-- Session creation and invite links
-- Shared WebSocket rooms with presence
-- Shared AI context with participant names
-- Live streaming to all participants
-- Message attribution and persistence
+| Provider | Default model | Notes |
+|----------|--------------|-------|
+| Anthropic | Claude Sonnet 4 | Best quality |
+| Gemini | Gemini 2.5 Flash | Fast, good value |
+| OpenRouter | Llama 3.1 8B | Free models available |
 
-**Post-MVP**
-- Personality profiles and personalized responses per participant
-- Behavioral inference from interaction patterns
-- Response delta comparison view
-- Support for more than two participants
-- Self-hosted Docker Compose distribution
-- Mobile-responsive experience
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ANTHROPIC_API_KEY` | - | Anthropic API key |
+| `GEMINI_API_KEY` | - | Google Gemini API key |
+| `OPENROUTER_API_KEY` | - | OpenRouter API key |
+| `PORT` | `8000` | Server port |
+| `DATABASE_PATH` | `./data/duet.db` | SQLite database path |
+| `VITE_API_URL` | `http://localhost:8000` | API URL for client |
+| `VITE_WS_URL` | `ws://localhost:8000` | WebSocket URL for client |
+| `RATE_LIMIT_MAX` | `30` | Max messages per window |
+| `RATE_LIMIT_WINDOW_MS` | `10000` | Rate limit window (ms) |
+| `RECONNECT_GRACE_MS` | `60000` | Reconnection grace period (ms) |
+
+## Development
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run dev servers (both)
+pnpm dev
+
+# Lint + format (Biome)
+pnpm check
+
+# Type checking
+pnpm typecheck
+
+# Tests
+pnpm test
+```
+
+## Tech stack
+
+- **Runtime**: Node.js + TypeScript (strict mode)
+- **Server**: Fastify, @fastify/websocket, better-sqlite3
+- **Client**: React Router v7 (framework mode), Zustand, TanStack Query
+- **LLM**: Anthropic SDK, Google GenAI SDK, OpenAI SDK (OpenRouter)
+- **Tooling**: Biome (lint + format), Vitest (tests), pnpm workspaces
+
+## Cloud version
+
+The hosted version at [joinduet.ai](https://joinduet.ai) adds authentication, private sessions, persistent history, and higher usage limits. This open-source version is the core engine - ephemeral sessions, no auth, BYOK.
 
 ## License
 

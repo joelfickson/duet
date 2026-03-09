@@ -282,7 +282,7 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-charcoal/30 px-6 py-4">
+      <header className="flex items-center justify-between border-b border-charcoal/30 px-4 py-3 sm:px-6 sm:py-4">
         <div className="flex items-center gap-3">
           <h1 className="font-display text-xl font-semibold tracking-tight text-white">
             Duet
@@ -293,7 +293,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-16">
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:px-6 sm:py-16">
         <div className="mx-auto w-full max-w-2xl text-center">
           <h2 className="font-display text-4xl font-semibold tracking-tight text-white sm:text-5xl">
             Think together,
@@ -349,7 +349,7 @@ export default function Home() {
         </div>
       </main>
 
-      <footer className="flex items-center justify-center gap-3 border-t border-charcoal/20 px-6 py-4 text-xs text-silver/40">
+      <footer className="flex items-center justify-center gap-3 border-t border-charcoal/20 px-4 py-3 text-xs text-silver/40 sm:px-6 sm:py-4">
         <span>Duet - Open source under MIT</span>
         <a
           href="https://github.com/joelfickson/joinduet"
