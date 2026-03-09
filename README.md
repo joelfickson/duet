@@ -17,7 +17,7 @@ The AI sees everything every participant contributes and addresses people by nam
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 24+
 - pnpm 9+
 
 ### Setup
