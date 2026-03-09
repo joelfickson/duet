@@ -3,6 +3,7 @@ import type {
   AiDonePayload,
   AiErrorPayload,
   ErrorPayload,
+  HistoryPayload,
   Message,
   MessageAckPayload,
   MessagePayload,
@@ -106,6 +107,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         case WsEvent.Presence: {
           const payload = data as PresencePayload;
           set({ participants: payload.participants });
+          break;
+        }
+        case WsEvent.History: {
+          const payload = data as HistoryPayload;
+          set({ messages: payload.messages });
           break;
         }
         case WsEvent.Message: {

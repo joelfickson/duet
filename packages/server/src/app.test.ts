@@ -1,4 +1,5 @@
 import type {
+  HistoryPayload,
   MessageAckPayload,
   MessagePayload,
   PresencePayload,
@@ -763,6 +764,64 @@ describe("e2e: reconnection", () => {
     const error = await errorPromise;
     expect(error.type).toBe(WsEvent.Error);
     expect((error as { code: string }).code).toBe("RECONNECT_FAILED");
+
+    ws.terminate();
+  });
+});
+
+function collectMessages(ws: TestSocket, count: number): Promise<WsPayload[]> {
+  return new Promise((resolve) => {
+    const results: WsPayload[] = [];
+    ws.on("message", (data: unknown) => {
+      results.push(JSON.parse(String(data)));
+      if (results.length === count) resolve(results);
+    });
+  });
+}
+
+describe("e2e: history on join", () => {
+  it("new participant receives message history on join", async () => {
+    const session = app.sessionService.create("test");
+
+    const ws1 = await injectWS();
+    const presence1 = waitForMessage(ws1);
+    ws1.send(joinPayload(session.id, "p1", "Alice"));
+    await presence1;
+
+    const ack1 = waitForMessage(ws1);
+    ws1.send(messagePayload(session.id, "p1", "Alice", "hello world"));
+    await ack1;
+
+    const ack2 = waitForMessage(ws1);
+    ws1.send(messagePayload(session.id, "p1", "Alice", "second message"));
+    await ack2;
+
+    const ws2 = await injectWS();
+    const ws2Messages = collectMessages(ws2, 2);
+    ws2.send(joinPayload(session.id, "p2", "Bob"));
+
+    const received = await ws2Messages;
+    const history = received.find(
+      (m) => m.type === WsEvent.History,
+    ) as HistoryPayload;
+    expect(history).toBeDefined();
+    expect(history.messages).toHaveLength(2);
+    expect(history.messages[0].content).toBe("hello world");
+    expect(history.messages[1].content).toBe("second message");
+
+    ws1.terminate();
+    ws2.terminate();
+  });
+
+  it("first participant joining an empty session receives no history event", async () => {
+    const session = app.sessionService.create("test");
+
+    const ws = await injectWS();
+    const msg = waitForMessage(ws);
+    ws.send(joinPayload(session.id, "p1", "Alice"));
+
+    const received = await msg;
+    expect(received.type).toBe(WsEvent.Presence);
 
     ws.terminate();
   });

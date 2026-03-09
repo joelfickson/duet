@@ -9,7 +9,8 @@ export default class WsController {
   handleJoin(conn: Connection, data: WsPayload, log: FastifyBaseLogger): void {
     if (data.type !== WsEvent.Join) return;
 
-    const { sessionService, connectionService, broadcastService } = this.server;
+    const { sessionService, connectionService, broadcastService, aiService } =
+      this.server;
 
     const session = sessionService.join(data.sessionId, data.participant);
     if (!session) {
@@ -27,6 +28,17 @@ export default class WsController {
       data.sessionId,
       data.participant.id,
     );
+
+    const history = aiService.getMessageHistory(data.sessionId);
+    if (history.length > 0) {
+      const historyPayload: WsPayload = {
+        type: WsEvent.History,
+        sessionId: data.sessionId,
+        messages: history,
+      };
+      conn.socket.send(JSON.stringify(historyPayload));
+    }
+
     log.info(
       { sessionId: data.sessionId, participantId: data.participant.id },
       "participant joined",
