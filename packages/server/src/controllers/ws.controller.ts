@@ -1,6 +1,7 @@
 import type { WsPayload } from "@duet/shared";
 import { WsEvent } from "@duet/shared";
 import type { FastifyBaseLogger } from "fastify";
+import { addMessageToHistory, triggerAiResponse } from "../services/ai";
 import { broadcastPresence, broadcastToSession } from "../services/broadcast";
 import type { Connection } from "../services/connections";
 import {
@@ -131,6 +132,7 @@ export function handleMessage(
   );
 
   bufferMessage(sessionId, message);
+  addMessageToHistory(sessionId, message);
 
   const broadcastPayload: WsPayload = {
     type: WsEvent.Message,
@@ -145,6 +147,10 @@ export function handleMessage(
     createdAt: message.createdAt,
   };
   conn.socket.send(JSON.stringify(ackPayload));
+
+  triggerAiResponse(sessionId).catch((err) => {
+    log.error({ err, sessionId }, "ai response failed");
+  });
 }
 
 export function handleTyping(

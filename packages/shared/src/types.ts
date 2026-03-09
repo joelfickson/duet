@@ -34,6 +34,8 @@ export enum WsEvent {
   MessageAck = "message-ack",
   Typing = "typing",
   AiChunk = "ai-chunk",
+  AiDone = "ai-done",
+  AiError = "ai-error",
   Error = "error",
   Presence = "presence",
   Reconnect = "reconnect",
@@ -67,6 +69,20 @@ export interface AiChunkPayload {
   type: WsEvent.AiChunk;
   sessionId: string;
   token: string;
+  seq: number;
+}
+
+export interface AiDonePayload {
+  type: WsEvent.AiDone;
+  sessionId: string;
+  message: Message;
+}
+
+export interface AiErrorPayload {
+  type: WsEvent.AiError;
+  sessionId: string;
+  code: string;
+  message: string;
 }
 
 export interface ErrorPayload {
@@ -100,6 +116,8 @@ export type WsPayload =
   | MessagePayload
   | TypingPayload
   | AiChunkPayload
+  | AiDonePayload
+  | AiErrorPayload
   | ErrorPayload
   | PresencePayload
   | MessageAckPayload

@@ -1,5 +1,7 @@
 import type {
   AiChunkPayload,
+  AiDonePayload,
+  AiErrorPayload,
   ErrorPayload,
   Message,
   MessageAckPayload,
@@ -25,6 +27,7 @@ interface SessionStore {
   typingParticipants: Set<string>;
   aiStreamingContent: string;
   isAiStreaming: boolean;
+  aiError: string | null;
   error: string | null;
 
   connect: (
@@ -55,6 +58,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   typingParticipants: new Set(),
   aiStreamingContent: "",
   isAiStreaming: false,
+  aiError: null,
   error: null,
 
   connect: (sessionId, participantId, displayName) => {
@@ -71,6 +75,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       typingParticipants: new Set(),
       aiStreamingContent: "",
       isAiStreaming: false,
+      aiError: null,
       error: null,
     });
 
@@ -130,7 +135,26 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           const payload = data as AiChunkPayload;
           set({
             isAiStreaming: true,
+            aiError: null,
             aiStreamingContent: store.aiStreamingContent + payload.token,
+          });
+          break;
+        }
+        case WsEvent.AiDone: {
+          const payload = data as AiDonePayload;
+          set({
+            isAiStreaming: false,
+            aiStreamingContent: "",
+            messages: [...store.messages, payload.message],
+          });
+          break;
+        }
+        case WsEvent.AiError: {
+          const payload = data as AiErrorPayload;
+          set({
+            isAiStreaming: false,
+            aiStreamingContent: "",
+            aiError: payload.message,
           });
           break;
         }
