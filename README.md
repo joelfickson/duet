@@ -136,9 +136,6 @@ pnpm test
 - **LLM**: Anthropic SDK, Google GenAI SDK, OpenAI SDK (OpenRouter)
 - **Tooling**: Biome (lint + format), Vitest (tests), pnpm workspaces
 
-## Cloud version
-
-The hosted version at [joinduet.ai](https://joinduet.ai) adds authentication, private sessions, persistent history, and higher usage limits. This open-source version is the core engine - ephemeral sessions, no auth, BYOK.
 
 ## License
 
