@@ -6,7 +6,7 @@
   "author": "Joel Fickson",
   "license": "MIT",
   "scripts": {
-    "dev": "pnpm --filter @duet/server dev & pnpm --filter @duet/client dev",
+    "dev": "pnpm -r --parallel --filter @duet/server --filter @duet/client dev",
     "build": "pnpm -r build",
     "lint": "biome lint --write .",
     "format": "biome format --write .",
@@ -16,6 +16,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "better-sqlite3",
       "esbuild"
     ]
   },
