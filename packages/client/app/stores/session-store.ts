@@ -8,6 +8,7 @@ import type {
   MessagePayload,
   Participant,
   PresencePayload,
+  ReplyTo,
   TypingPayload,
   WsPayload,
 } from "@duet/shared";
@@ -29,6 +30,7 @@ interface SessionStore {
   isAiStreaming: boolean;
   aiError: string | null;
   error: string | null;
+  replyTo: ReplyTo | null;
 
   connect: (
     sessionId: string,
@@ -38,6 +40,7 @@ interface SessionStore {
   disconnect: () => void;
   sendMessage: (content: string) => void;
   sendTyping: (isTyping: boolean) => void;
+  setReplyTo: (replyTo: ReplyTo | null) => void;
 }
 
 let socket: WebSocket | null = null;
@@ -60,6 +63,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   isAiStreaming: false,
   aiError: null,
   error: null,
+  replyTo: null,
 
   connect: (sessionId, participantId, displayName) => {
     const state = get();
@@ -209,8 +213,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       role: "user",
       createdAt: new Date().toISOString(),
     };
+    if (state.replyTo) {
+      message.replyTo = state.replyTo;
+    }
 
-    set({ messages: [...state.messages, message] });
+    set({ messages: [...state.messages, message], replyTo: null });
 
     send({
       type: WsEvent.Message,
@@ -236,5 +243,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       participantId: state.participantId,
       isTyping,
     });
+  },
+
+  setReplyTo: (replyTo) => {
+    set({ replyTo });
   },
 }));
